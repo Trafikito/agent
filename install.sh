@@ -362,7 +362,11 @@ echo "** Checking CPU load"
 echo "*-*-*-*------------ Trafikito command: vmstat" >> "$TMP_FILE"
 vmstat >> "$TMP_FILE" 2>&1
 
-echo "** Checking CPU information"
+echo "** Checking CPU information 1/2"
+echo "*-*-*-*------------ Trafikito command: cat /proc/cpuinfo | sed '/^\s*$/q' | grep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'" >> "$TMP_FILE"
+cat /proc/cpuinfo | sed '/^\s*$/q' | grep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family' >> "$TMP_FILE" 2>&1
+
+echo "** Checking CPU information 2/2"
 echo "*-*-*-*------------ Trafikito command: cat /proc/cpuinfo | sed '/^\s*$/q'" >> "$TMP_FILE"
 cat /proc/cpuinfo | sed '/^\s*$/q' >> "$TMP_FILE" 2>&1
 
