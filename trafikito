@@ -1,0 +1,104 @@
+#!/usr/bin/env sh
+
+export RUNAS=nobody
+export CONTROL=trafikito
+export AGENTNAME=trafikito-agent
+export BASEDIR=/opt/trafikito
+export AGENT=$BASEDIR/$AGENTNAME
+export PIDFILE=$BASEDIR/$CONTROL.pid
+export LOGFILE=$BASEDIR/$CONTROL.log
+
+usage() {
+    echo "Usage: $0 {start|stop|restart|status}"
+}
+
+needroot() {
+    if [ `whoami` != root ]; then
+        echo "$CONTROL: you must be root to control the $CONTROL agent"
+        exit 1
+    fi
+}
+
+# returns:
+#  $STATUS
+#    0 = not running
+#    1 = running normally
+#    2 = pid file but agent not running
+#    3 = agent running but no pid file
+#  $PID = pid of agent or list of pids (STATUS 3)
+#  $ERROR = true if set by start/stop
+getstatus() {
+    # check if pidfile exists
+    if [ -f $PIDFILE ]; then
+        PID=`cat $PIDFILE`
+        # agent running ?
+        cmd=`ps -p $PID -o cmd=`
+        if [ "$cmd" ]; then
+            STATUS=1
+        else
+            STATUS=2
+        fi
+    else
+        # check if agent is running uncontrolled
+        PID=`pgrep -f $AGENTNAME`
+        if [ "$PID" ]; then
+            STATUS=3
+        else
+            STATUS=0
+        fi
+    fi
+}
+
+start() {
+    getstatus
+    if [ $STATUS -ne 0 ]; then
+        ERROR=1
+        status
+        exit 1
+    fi
+    sudo -u $RUNAS nohup $AGENT >>$LOGFILE 2>&1 &
+    echo -n $! >$PIDFILE
+    status
+}
+
+stop() {
+    getstatus
+    if [ $STATUS -ne 1 ]; then
+        ERROR=1
+        status
+        exit 1
+    fi
+    kill $PID
+    rm -f $PIDFILE
+    status
+}
+
+status() {
+    getstatus
+    if [ "$ERROR" ]; then
+        Already=" already"
+        Error="** Error: "
+    else
+        Already=""
+        Error=""
+    fi
+    case $STATUS in
+        0) echo "$Error$CONTROL is$Already stopped" ;;
+        1) echo "$Error$CONTROL is$Already running (pid $PID)" ;;
+        2) echo "$Error$CONTROL pid file exists but agent has died: fix ''sudo rm $PIDFILE''" ;;
+        3) echo "$Error$CONTROL one or more instances of agent is running: fix with 'sudo kill -9 "$PID"'" ;;
+        *) echo "$Error$CONTROL assert error! (STATUS=$STATUS)"
+    esac
+}
+
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+case $1 in
+    start)   needroot;  start   ;;
+    stop)    needroot;  stop    ;;
+    restart) needroot;  stop; start ;;
+    status)  status  ;;
+    *) usage
+esac
