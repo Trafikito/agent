@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+sudo rm -rf tmp
+
+mkdir tmp
+cd tmp
+
+../trafikito_agent_install.sh 0cf7087f99d267c7521c5e3af47464538d4a6f3eD8 92bc5739-aa53-49a1-aa6e-d7c538b685c5

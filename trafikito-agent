@@ -109,8 +109,8 @@ while true; do
     # set commands_to_run E.g.: commands_to_run="63e374bd-92be-4275-a985-ba2b8d2a953d,trafikito_uptime,trafikito_total_ram"
     fn_set_commands_to_run
 
-    # Clean up tmp file
-    echo "" > "$tmp_file"
+    # create new tmp file
+    >$tmp_file
 
     # Run commands and send results to tmp file
     fn_execute_all_commands
@@ -122,6 +122,6 @@ while true; do
     fn_send_output_to_trafikito
 
     # Clean up tmp file
-    echo "" > "$tmp_file"
+    >$tmp_file
 
 done

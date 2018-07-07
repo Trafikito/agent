@@ -35,9 +35,9 @@ fn_execute_all_commands(){
     for cmd in $commands_to_run
     do
         if [ "$first" -ne "1" ]; then
-            echo "Running: $cmd first: $first"
+            echo "`date +'%x %X'` Running: $cmd first: $first"
             fn_execute_trafikito_cmd "$cmd"
-            echo "Running $cmd is done"
+            echo "`date +'%x %X'` Running $cmd is done"
         else
             call_token="$cmd"
         fi;
