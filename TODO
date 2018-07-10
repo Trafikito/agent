@@ -4,3 +4,6 @@ pgp: Wed Jul  4 12:22:59 NZST 2018
 pgp: Mon Jul  2 10:33:56 NZST 2018
     When installing on debian install.sh:
     lsof: WARNING: can't stat() fuse.gvfsd-fuse file system /run/user/1000/gvfs
+
+pgp: Wed Jul 11 09:32:30 NZST 2018
+    selinux

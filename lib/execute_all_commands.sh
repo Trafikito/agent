@@ -30,14 +30,14 @@ fn_execute_all_commands(){
     IFS=","
     # First in commands list is unique call token
     first="1"
-    echo "commands_to_run: $commands_to_run"
+    log "commands_to_run: $commands_to_run"
 
     for cmd in $commands_to_run
     do
         if [ "$first" -ne "1" ]; then
-            echo "`date +'%x %X'` Running: $cmd first: $first"
+            log "Running: $cmd first: $first"
             fn_execute_trafikito_cmd "$cmd"
-            echo "`date +'%x %X'` Running $cmd is done"
+            log "Running $cmd is done"
         else
             call_token="$cmd"
         fi;

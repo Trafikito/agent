@@ -141,6 +141,7 @@ STOP
 # source the file just generated
 . $BASEDIR/lib/utilities.sh
 
+# install curl
 echo -n "Checking for curl..."
 curl=`which curl`
 if [ -z $curl ]; then
