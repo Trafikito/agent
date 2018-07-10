@@ -26,13 +26,77 @@
 #  * SUCH DAMAGE.
 #  */
 
-###########################################
-# This agent should work on any linux machine.
-# Dependencies: Shell Script (sh), grep, sed, eval, awk, head, curl, touch, chmod
-###########################################
+# SYNOPSIS: The trafikito agent
 
-DIR="${0%/*}"
+export AGENT_VERSION=10   # TODO
 
+BASEDIR="${0%/*}"
+BASEDIR=tmp/trafikito  # TODO
+INTERVAL=60   # run every minute
+
+# run without $PATH
+#unset PATH
+
+# source config to get time constraints
+. $BASEDIR/etc/trafikito.cfg || exit 1
+
+DOSTART=3     # TODO override minute in hour (0..59) at which agent should run to prevent server overload
+
+# calculate time to start
+start=`date +%F`
+h=`date +%H`
+h=`expr $h + 1`
+h=`expr $h % 24`
+NODELAY=`date +%s -d "${start}T$h:$DOSTART"`
+
+# testing
+INTERVAL=5
+NODELAY=`date +%s`
+
+while true; do
+    start=`date +%s`
+    if [ $start -lt $NODELAY ]; then # wait 5 seconds to get closer to DOSTART
+        sleep 5
+        start=`date +%s`
+    fi
+
+    now=`date +%s`
+    sleep=$((INTERVAL-now+start))
+    if [ $sleep -gt 0 ]; then
+        echo "Sleep $sleep"
+        #sleep $sleep
+    fi
+
+    # source everything else to allow dynamic updates
+    . $BASEDIR/lib/set_commands_to_run.sh || exit 1
+
+    # set commands_to_run E.g.: commands_to_run="63e374bd-92be-4275-a985-ba2b8d2a953d,trafikito_uptime,trafikito_total_ram"
+    fn_set_commands_to_run
+    if [ ! -z "$ERROR" ]; then
+        echo $ERROR
+        echo "Skipping this run"
+        continue
+    fi
+
+    # create new tmp file
+    >$tmp_file
+
+    # Run commands and send results to tmp file
+    fn_execute_all_commands
+exit 1
+
+    # collect available commands from available_commands.sh
+    fn_collect_available_commands
+
+    # Send outputs to Trafikito API
+    fn_send_output_to_trafikito
+
+    # Clean up tmp file
+    >$tmp_file
+
+done
+
+exit 1
 . "${DIR}/functions/set_os.sh"
 . "${DIR}/functions/set_environment.sh"
 . "${DIR}/functions/execute_trafikito_cmd.sh"

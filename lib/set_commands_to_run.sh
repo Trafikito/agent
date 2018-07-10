@@ -26,23 +26,30 @@
 #  * SUCH DAMAGE.
 #  */
 
-# SYNOPSIS: script to reconfigure trafikito.app
+fn_set_commands_to_run() {
+    commands_to_run=`curl -s -X POST -H "Authorization: $API_KEY" \
+                    --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=os&osCodename=os_codename&osRelease=os_release&centosFlavor=centos_flavor" \
+                    "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
+    echo $commands_to_run
 
-BASEDIR="${0%/*}"
-
-# source config and libraries
-. $BASEDIR/etc/trafikito.cfg || exit 1
-. $BASEDIR/lib/utilities.sh  || exit 1
-
-echo "Looking for tools to run commands..."
-TOOLLIST="tree cat date df expr free grep hostname lsof netstat sleep sed top uptime vmstat"
-for tool in $TOOLLIST; do
-    echo -n "  $tool: "
-    x=`which $tool`
-    if [ -z "$x" ]; then
-        echo "not found - going to install it"
-        installBinary $tool
-    else
-        echo "found $x"
+    tmp=`echo $commands_to_run | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
+    if [ -n "$tmp" ]; then
+        ERROR="Error: Do not call more then once per minute. ANOTHER_REQUEST_IN_PROGRESS"
+        return 1
     fi
-done
+
+    tmp=`echo "$commands_to_run" | grep "\"error\":{\"code\":\"#"`
+    if [ -n "$tmp" ]; then
+        ERROR="Error: Can not get commands to run: $tmp"
+        return 1
+    fi
+        
+    if [ -z "$commands_to_run" ];
+    then
+        ERROR="Error: received empty config from Trafikito.com. Probably a network outage?"
+        return 1
+    fi
+    
+    ERROR=""
+    return 0
+}

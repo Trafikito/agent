@@ -1,5 +1,3 @@
-#!/usr/bin/env sh
-
 # /*
 #  * Copyright (C) Trafikito.com
 #  * All rights reserved.
@@ -39,14 +37,17 @@ echo "    Trafikito.com agent installation"
 echo ""
 echo ""
 
-if [ $# -ne 2 ]; then
-    echo "Usage: sh $0 <api_key> <server_id>"
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+if [ $# -ne 3 ]; then
+    echo "Usage: sh $0 <api_key> <server_id> <start_minute>"
     exit 1
 fi
-api_key=$1
-server_id=$1
+API_KEY=$1
+SERVER_ID=$2
+START_ON=$3
 
-# running as root or user
+# running as root or user ?
 RUNAS="nobody"
 WHOAMI=`whoami`
 if [ "$WHOAMI" != "root" ]; then
@@ -54,6 +55,7 @@ cat << STOP
     You are not root: the preferred way to install trafikito 
     is by using root. This will cause the agent to be run as
     the user 'nobody' which will improve security.
+
     To install as root either log in as root and execute the
     script or use 'sudo sh $0'
 
@@ -73,83 +75,58 @@ if [ $? -ne 0 ]; then
     mkdir $BASEDIR || exit 1
 fi
 
-LIBDIR="$BASEDIR/lib"
-mkdir $LIBDIR
-FUNCDIR="$BASEDIR/functions"
-mkdir $FUNCDIR
+# create std subdirs
+mkdir $BASEDIR/etc
+mkdir $BASEDIR/lib
+mkdir $BASEDIR/var
 
 # build config
-CONFIG="$BASEDIR/trafikito.cfg"
+CONFIG="$BASEDIR/etc/trafikito.cfg"
 cat >$CONFIG <<STOP
-# Server API key
-api_key=$api_key
-# This server id at Trafikito.com
-server_id=$server_id
-# Temporary file used to gather output of commands. Must be readable and writable
-tmp_file=/opt/trafikito/trafikito_tmp.txt
-# Trafikito API URLs
-url_output=https://api.trafikito.com/v1/agent/output
-url_get_config=https://api.trafikito.com/v1/agent/get
+export RUNAS=$RUNAS
+export API_KEY=$API_KEY
+export SERVER_ID=$SERVER_ID
+export START_ON=$START_ON
+export TMP_FILE=$BASEDIR/var/trafikito.tmp
+export URL_OUTPUT=https://api.trafikito.com/v1/agent/output
+export URL_GET_CONFIG=https://api.trafikito.com/v1/agent/get
 STOP
 
-# figure out how to download the rest of the scripts
-# at this stage not sure should use curl or wget so build the library script here
-# but will need installBinary() later for reconfigure.sh and not a good idea to
+# at this stage curl may not be installed yet
+# but will need installBinary() later for reconfigure and not a good idea to
 # have the code at more than one place :-)
 
-cat >$LIBDIR/packages.lib <<STOP
+cat >$BASEDIR/lib/utilities.sh <<STOP
 ###################################################
 # do not edit: all edits to this file will be lost!
 ###################################################
 
 # function to install a binary (just in case some binaries are in a package)
 installBinary() {
-    binary=$1
-    package=$binary
-    echo -n "  Press <enter> to install $package (^C to stop): "; read x
+    binary=\$1
+    package=\$binary
+
+    if [ \`whoami\` != 'root' ]; then
+        echo "Sorry! Need root privilege to install '\$binary'"
+        echo "You have to install it manually"
+        exit 1
+    fi
+
+    echo -n "  Press <enter> to install \$package (^C to stop): "; read x
     if [ -x /usr/bin/apt-get ]; then # Debian
-        /usr/bin/apt-get -y install $package
-        STATUS=$?
+        /usr/bin/apt-get -y install \$package
+        return `which \$binary`
     elif [ -x /usr/bin/yum ]; then # RedHat
-        /usr/bin/yum -y install $package
-        STATUS=$?
+        /usr/bin/yum -y install \$package
+        return `which \$binary`
     elif [ -x /sbin/apk ]; then # alpine
-        sbin/apk -y install $package
-        STATUS=$?
+        sbin/apk -y install \$package
+        return `which \$binary`
     else
         echo "ERROR: this system's package manager is not supported"
         exit 1
     fi
-    if [ $STATUS -ne 0 ]; then
-        echo "ERROR: Installation failed"
-        exit 1
-    fi
 }
-STOP
-
-echo "Looking for tool to talk to trafikito..."
-AGENTLIST="curl wget"
-for agent in $AGENTLIST; do
-    echo -n "  $agent: "
-    x=`which $agent`
-    if [ $? -eq 0 ]; then
-        echo "found $x"
-        TXFR=$agent
-        EXEC=$x
-        break
-    else
-        echo "not found"
-    fi
-done
-if [ -z "$TXFR" ]; then
-    echo "  Could not find a tool to talk to trafikito"
-    installBinary curl
-fi
-
-# build the transfer library
-if [ "$TXFR" = "curl" ]; then
-
-cat >"$LIBDIR/transfer.lib" <<STOP
 
 # function to get files using curl
 getfile() {
@@ -161,67 +138,57 @@ getfile() {
 
 STOP
 
-elif [ "$TXFR" = "wget" ]; then
+# source the file just generated
+. $BASEDIR/lib/utilities.sh
 
-cat >"$LIBDIR/transfer.lib" <<STOP
-
-# function to get files using wget
-getfile() {
-}
-
-STOP
-
+echo -n "Checking for curl..."
+curl=`which curl`
+if [ -z $curl ]; then
+    echo "not found"
+    TXFR=`installBinary curl`
 else
-    echo "ASSERT ERROR TXFR = $TXFR"
-    exit 1
+    echo "found $curl"
+    TXFR=$curl
 fi
-
-# download agent's files
-. $LIBDIR/transfer.lib
+if [ -z "$TXFR" ]; then
+    echo "  Looks like your distro does not have curl: please contact trafikito support"  # TODO
+fi
 
 # TODO
 URL="https://api.trafikito.com/v1/agent/get_agent_file?file="
-URL="http://tui.home/trafikito/get_agent_file?file="
-
-# redefine getfile for demo TODO
-getfile() {
-    source_url=$1
-    dest=$2
-    source=`echo $dest | sed s#$BASEDIR#..#`
-    cp $source $dest
-}
+URL="http://tui.home/trafikito/"
 
 echo "Downloading functions:"
-echo "* 1/9..."
-getfile "${URL}functions/execute_all_commands.sh"       "${BASEDIR}/functions/execute_all_commands.sh"
-echo "* 2/9..."
-getfile "${URL}functions/execute_trafikito_cmd.sh"      "${BASEDIR}/functions/execute_trafikito_cmd.sh"
-echo "* 3/9..."
-getfile "${URL}functions/get_config_value.sh"           "${BASEDIR}/functions/get_config_value.sh"
-echo "* 4/9..."
-getfile "${URL}functions/send_output.sh"                "${BASEDIR}/functions/send_output.sh"
-echo "* 5/9..."
-getfile "${URL}functions/set_commands_to_run.sh"        "${BASEDIR}/functions/set_commands_to_run.sh"
-echo "* 6/9..."
-getfile "${URL}functions/set_environment.sh"            "${BASEDIR}/functions/set_environment.sh"
-echo "* 7/9..."
-getfile "${URL}functions/set_os.sh"                     "${BASEDIR}/functions/set_os.sh"
-echo "* 8/9..."
-getfile "${URL}functions/collect_available_commands.sh" "${BASEDIR}/functions/collect_available_commands.sh"
-echo "* 9/9..."
-getfile "${URL}reconfigure"                             "${BASEDIR}/reconfigure"
+echo "  * 1/8..."
+getfile "${URL}lib/execute_all_commands.sh"       "${BASEDIR}/lib/execute_all_commands.sh"
+echo "  * 2/8..."
+getfile "${URL}lib/execute_trafikito_cmd.sh"      "${BASEDIR}/lib/execute_trafikito_cmd.sh"
+echo "  * 3/8..."
+getfile "${URL}lib/get_config_value.sh"           "${BASEDIR}/lib/get_config_value.sh"
+echo "  * 4/8..."
+getfile "${URL}lib/send_output.sh"                "${BASEDIR}/lib/send_output.sh"
+echo "  * 5/8..."
+getfile "${URL}lib/set_commands_to_run.sh"        "${BASEDIR}/lib/set_commands_to_run.sh"
+echo "  * 6/8..."
+getfile "${URL}lib/set_environment.sh"            "${BASEDIR}/lib/set_environment.sh"
+echo "  * 7/8..."
+getfile "${URL}lib/set_os.sh"                     "${BASEDIR}/lib/set_os.sh"
+echo "  * 8/8..."
+getfile "${URL}lib/collect_available_commands.sh" "${BASEDIR}/lib/collect_available_commands.sh"
 
-echo "Downloading agent..."
-getfile "${URL}trafikito" "${BASEDIR}/trafikito"
+echo "Downloading agent and support files..."
+echo "  * 1/3..."
+getfile "${URL}trafikito"       "${BASEDIR}/trafikito"
+echo "  * 2/3..."
 getfile "${URL}trafikito-agent" "${BASEDIR}/trafikito-agent"
-exit 1
+echo "  * 3/3..."
+getfile "${URL}reconfigure"     "${BASEDIR}/reconfigure"
+
 chmod +x "${BASEDIR}/trafikito" "${BASEDIR}/trafikito-agent" "${BASEDIR}/reconfigure"
+chown -R $RUNAS $BASEDIR
 
 # reconfigure to build executables
 ${BASEDIR}/reconfigure
-
-echo "STOP HERE TO NOT INSTALL STARTUP!"
-exit 0
 
 # configure restart
 if [ "$WHOAMI" != "root" ]; then
@@ -229,6 +196,7 @@ echo <<STOP
 Script was not installed as root: cannot configure startup
 You can control the script manually with:
   $BASEDIR/trafikito {start|stop|restart|status}
+
 STOP
 fi
 
