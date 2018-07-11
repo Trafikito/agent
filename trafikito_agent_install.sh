@@ -40,34 +40,56 @@ echo ""
 echo ""
 
 if [ $# -ne 2 ]; then
-    echo "Usage: sh $0 <api_key> <server_id>"
+    echo "To install Trafikito agent you need to get server api key and server id."
+    echo "To get all the details please follow these steps:"
+    echo "1. Visit https://trafikito.com/servers"
+    echo "2. Find your server on servers list or add new one"
+    echo "3. Click 3 dots button to open menu and select: How to install?"
+    echo "4. Use this command (replace <api_key> and <server_id> with correct values):"
+    echo "sh $0 <api_key> <server_id>"
     exit 1
 fi
+
+# todo in comments: sample call how to use the file, where get api key and server id
+
 api_key=$1
 server_id=$1
 
 # running as root or user
+
 RUNAS="nobody"
 WHOAMI=`whoami`
 if [ "$WHOAMI" != "root" ]; then
+
+# todo will 'sudo sh $0' work for all? How about 'su sh $0'? Can we detect if user should use sudo or su?
 cat << STOP
-    You are not root: the preferred way to install trafikito 
-    is by using root. This will cause the agent to be run as
-    the user 'nobody' which will improve security.
-    To install as root either log in as root and execute the
-    script or use 'sudo sh $0'
+    If possible, run installation as root user.
+    Root user is used to make script running as 'nobody' which improves security.
+    To install as root either log in as root and execute the script or use:
+
+    sudo sh $0
 
 STOP
+# todo removing -n while it's ok to have a newline and i get actual -n printed in terminal so it's just extra distraction in terminal
+# todo can it ask:  Continue as $WHOAMI? [y/N]
+# todo default is NO, so capitalized
+# todo continue if enters: y, Y, yes, Yes, YES, otherwise terminate. I bet most of people will just click enter w/o reading
+# todo so it would terminate and user would read
     echo -n "Press ^C to exit and rerun or run agent as $WHOAMI: "; read x
     RUNAS=$WHOAMI
 fi
 
 # install
 BASEDIR="`pwd`/trafikito"
-echo -n "Going to install trafikito in $BASEDIR (^C to change directory): "; read x
+# todo lets use [y/n] not ^C while on some places it's hard to click combinations, e.g. on phone
+# todo and phone is becoming normal way to ssh into places :-) and "yes" are: y, Y, yes, Yes, YES
+# todo on this case yes is default: [Y/n] default is capital
+
+echo -n "Going to install Trafikito in $BASEDIR (^C to change directory): "; read x
 
 mkdir $BASEDIR 2>/dev/null
 if [ $? -ne 0 ]; then
+    # todo use [Y/n] and yes is default if just clicks enter, so Y is capital
     echo -n "Found existing $BASEDIR: okay to remove it? (^C to break) "; read x
     rm -rf $BASEDIR
     mkdir $BASEDIR || exit 1
@@ -83,7 +105,7 @@ CONFIG="$BASEDIR/trafikito.cfg"
 cat >$CONFIG <<STOP
 # Server API key
 api_key=$api_key
-# This server id at Trafikito.com
+# Server id at Trafikito.com
 server_id=$server_id
 # Temporary file used to gather output of commands. Must be readable and writable
 tmp_file=/opt/trafikito/trafikito_tmp.txt
@@ -92,11 +114,13 @@ url_output=https://api.trafikito.com/v1/agent/output
 url_get_config=https://api.trafikito.com/v1/agent/get
 STOP
 
-# figure out how to download the rest of the scripts
-# at this stage not sure should use curl or wget so build the library script here
-# but will need installBinary() later for reconfigure.sh and not a good idea to
-# have the code at more than one place :-)
+# todo figure out how to download the rest of the scripts
+# todo at this stage not sure should use curl or wget so build the library script here
+# todo but will need installBinary() later for reconfigure.sh and not a good idea to
+# todo have the code at more than one place :-)
 
+# todo while all old functions use this naming pattern: fn_some_word would be great to keep using
+# todo same pattern for all functions, so installBinary -> fn_install_binary
 cat >$LIBDIR/packages.lib <<STOP
 ###################################################
 # do not edit: all edits to this file will be lost!
@@ -127,7 +151,7 @@ installBinary() {
 }
 STOP
 
-echo "Looking for tool to talk to trafikito..."
+echo "Looking for tool to talk to Trafikito..."
 AGENTLIST="curl wget"
 for agent in $AGENTLIST; do
     echo -n "  $agent: "
@@ -142,12 +166,15 @@ for agent in $AGENTLIST; do
     fi
 done
 if [ -z "$TXFR" ]; then
-    echo "  Could not find a tool to talk to trafikito"
+    echo "Could not find a tool to talk to Trafikito"
     installBinary curl
 fi
 
 # build the transfer library
 if [ "$TXFR" = "curl" ]; then
+
+# todo while all old functions use this naming pattern: fn_some_word would be great to keep using
+# todo same pattern for all functions, so getfile -> fn_get_file
 
 cat >"$LIBDIR/transfer.lib" <<STOP
 
@@ -162,6 +189,9 @@ getfile() {
 STOP
 
 elif [ "$TXFR" = "wget" ]; then
+
+# todo while all old functions use this naming pattern: fn_some_word would be great to keep using
+# todo same pattern for all functions, so getfile -> fn_get_file
 
 cat >"$LIBDIR/transfer.lib" <<STOP
 
@@ -182,6 +212,9 @@ fi
 # TODO
 URL="https://api.trafikito.com/v1/agent/get_agent_file?file="
 URL="http://tui.home/trafikito/get_agent_file?file="
+
+# todo while all old functions use this naming pattern: fn_some_word would be great to keep using
+# todo same pattern for all functions, so getfile -> fn_get_file
 
 # redefine getfile for demo TODO
 getfile() {
