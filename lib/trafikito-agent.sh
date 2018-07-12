@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 # /*
-#  * Copyright (C) Nginx, Inc.
+#  * Copyright (C) Trafikito.com
 #  * All rights reserved.
 #  *
 #  * Redistribution and use in source and binary forms, with or without
@@ -26,12 +26,15 @@
 #  * SUCH DAMAGE.
 #  */
 
+# SYNOPSIS: The real trafikito agent
+
+export AGENT_VERSION=14
+
+. $BASEDIR/lib/available_commands.sh || exit 1 # TODO the format of this file is DANGEROUS!
+
+###############################################################################
 # this will set variables "os", "os_codename", "os_release" and "centos_flavor"
-
-# Sample call:
-# get_os_name
-# echo "$os"
-
+###############################################################################
 fn_set_os() {
     
     centos_flavor="centos"
@@ -122,3 +125,132 @@ fn_set_os() {
         esac
     fi
 }
+
+###################################################
+# functions to handle logs instead of using syslog
+###################################################
+export LOGFILE=$BASEDIR/var/log
+
+log() {
+    echo "`date +'%x %X'` $*" >>$LOGFILE
+    #test -z "DEBUG" || echo "`date +'%x %X'` $*"
+}
+
+debug() {
+    if [ "$DEBUG" ]; then
+        log $*
+    fi
+}
+
+##########################################################
+# function to get the commands to execute from the server
+##########################################################
+fn_set_commands_to_run() {
+    commands_to_run=`curl -s -X POST -H "Authorization: $API_KEY" \
+                    --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=os&osCodename=os_codename&osRelease=os_release&centosFlavor=centos_flavor" \
+                    "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
+    debug "commands to run $commands_to_run"
+
+    tmp=`echo $commands_to_run | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
+    if [ -n "$tmp" ]; then
+        ERROR="Error: Do not call more then once per minute. ANOTHER_REQUEST_IN_PROGRESS"
+        return 1
+    fi
+
+    tmp=`echo "$commands_to_run" | grep "\"error\":{\"code\":\"#"`
+    if [ -n "$tmp" ]; then
+        ERROR="Error: Can not get commands to run: $tmp"
+        return 1
+    fi
+        
+    if [ -z "$commands_to_run" ];
+    then
+        ERROR="Error: received empty config from Trafikito.com. Probably a network outage?"
+        return 1
+    fi
+    
+    ERROR=""
+    return 0
+}
+
+###########################################
+# execute all commands received from server
+###########################################
+fn_execute_all_commands() {
+    IFS=","
+    # First in commands list is unique call token
+    first="1"
+    echo "commands_to_run: $commands_to_run"
+
+    for cmd in $commands_to_run
+    do
+        if [ "$first" -ne "1" ]; then
+            log "Running: $cmd first: $first"
+            fn_execute_trafikito_cmd "$cmd"
+            log "Running $cmd is done"
+        else
+            CALL_TOKEN="$cmd"
+        fi;
+        first="0"
+    done
+}
+
+##########################
+# execute a single command
+##########################
+fn_execute_trafikito_cmd() {
+    # can execute only commands with trafikito_ in it
+    cmd="$1"
+    if [ -z "$cmd" ]; then
+        # can not execute empty string
+        echo "No command specified for execute_trafikito_cmd. Command: $cmd"
+    elif [ $(echo "$cmd" | grep "trafikito_" | sed "s/[^a-zA-Z_]*//g") = "$cmd" ]; then
+        # can execute, let's do it. Echo commands delimiter:
+        echo "*-*-*-*------------ Trafikito command: $cmd" >> "$TMP_FILE"
+        # $cmd is validated. has trafikito_ prefix and is single word with a-Z and _ characters.
+        cmd="$(eval echo "\$$cmd")"
+        
+        # $cmd command is set by user at available_commands.sh
+        eval "$cmd >> $TMP_FILE 2>&1"
+    else
+        # can not execute command without trafikito_ prefix
+        echo "Can not execute command without trafikito_ prefix. Command: $cmd"
+    fi
+}
+
+##########################################
+# collect available commands into TMP_FILE
+##########################################
+fn_collect_available_commands() {
+    echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
+    cat "$BASEDIR/lib/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
+}
+
+##################################################
+# start of main
+##################################################
+
+fn_set_os
+
+log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
+log "agent run started"
+
+# gets commands to run from trafikito
+fn_set_commands_to_run
+if [ ! -z "$ERROR" ]; then
+    log $ERROR
+    log "Skipping this run"
+else
+    # create new tmp file
+    >$TMP_FILE
+
+    # Run commands and send results to tmp file
+    fn_execute_all_commands
+
+    # collect available commands from available_commands.sh
+    fn_collect_available_commands
+
+    # Send outputs to Trafikito API
+    curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" \
+         -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" --retry 3 --retry-delay 1 --max-time 30
+fi

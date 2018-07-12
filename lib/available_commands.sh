@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-
+#
 # /*
 #  * Copyright (C) Trafikito.com
 #  * All rights reserved.
@@ -25,33 +25,39 @@
 #  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 #  * SUCH DAMAGE.
 #  */
-
-# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent to allow for dynamic updates
-
-#export DEBUG=1
-
-if [ "$DEBUG" ]; then
-    export BASEDIR=tmp/trafikito
-else
-    export BASEDIR="${0%/*}"
-fi
-
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-
-INTERVAL=60   # run every minute
-
-# source configuration to get START_ON
-. $BASEDIR/etc/trafikito.cfg || exit 1
-
-while true; do
-    sec=`date +%S`
-    while [ $sec -ne $START_ON ]; do
-        sleep 1
-        sec=`date +%S`
-    done
-    #x=`shuf -i 1-120 -n 1`
-    echo ""
-    echo "`date +%X` run started"
-    . $BASEDIR/lib/trafikito-agent.sh
-
-done
+#
+# This file must list all commands you want to use in data source options at Trafikito.com
+#
+# - Each command MUST START with: trafikito_
+# - NO spaces around =
+# - Command is inside double quotation marks
+# - Command name MUST be letters and underscore. Regex pattern: a-zA-Z_
+# - One command per row
+#
+# Sample rows:
+#
+# trafikito_uptime="uptime"
+# trafikito_total_ram="/usr/sbin/sysctl hw.memsize"
+# trafikito_df="df -hl"
+#
+# Why do we need this file?
+#
+# For enhanced security. If you would lose your login credentials you will still be safe.
+# Because to execute malware command you will still have to connect to your server and update this file.
+#
+trafikito_free="free"
+trafikito_cpu_info_full="cat /proc/cpuinfo | sed '/^\s*$/q'"
+trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | grep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
+trafikito_uptime="uptime"
+trafikito_cpu_units_count="cat /proc/cpuinfo 2>&1 | grep processor | wc -l"
+trafikito_vmstat="vmstat"
+trafikito_df_p="df -P"
+trafikito_hostname="hostname"
+trafikito_curl="curl --version"
+trafikito_df_h="df -h"
+trafikito_lsof_count_network_connections="lsof -i | grep '\->' | wc -l"
+trafikito_lsof_count_open_files="lsof | wc -l"
+trafikito_netstat_i="netstat -i"
+trafikito_vmstat_s="vmstat -s"
+trafikito_top="top -bcn1"
+trafikito_test="uname -a"

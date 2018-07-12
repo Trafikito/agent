@@ -40,7 +40,7 @@ echo ""
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 if [ $# -ne 3 ]; then
-    echo "Usage: sh $0 <api_key> <server_id> <start_minute>"
+    echo "Usage: sh $0 <api_key> <server_id> <start_second>"
     exit 1
 fi
 API_KEY=$1
@@ -65,7 +65,7 @@ STOP
 fi
 
 # install
-BASEDIR="`pwd`/trafikito"
+export BASEDIR="`pwd`/trafikito"
 echo -n "Going to install trafikito in $BASEDIR (^C to change directory): "; read x
 
 mkdir $BASEDIR 2>/dev/null
@@ -156,34 +156,16 @@ if [ -z "$TXFR" ]; then
 fi
 
 # TODO
-URL="https://api.trafikito.com/v1/agent/get_agent_file?file="
-URL="http://tui.home/trafikito/"
+#URL="https://api.trafikito.com/v1/agent/get_agent_file?file="
+#URL="http://tui.home/trafikito/"
+URL=http://tui.home/trafikito/
 
-echo "Downloading functions:"
-echo "  * 1/8..."
-getfile "${URL}lib/execute_all_commands.sh"       "${BASEDIR}/lib/execute_all_commands.sh"
-echo "  * 2/8..."
-getfile "${URL}lib/execute_trafikito_cmd.sh"      "${BASEDIR}/lib/execute_trafikito_cmd.sh"
-echo "  * 3/8..."
-getfile "${URL}lib/get_config_value.sh"           "${BASEDIR}/lib/get_config_value.sh"
-echo "  * 4/8..."
-getfile "${URL}lib/send_output.sh"                "${BASEDIR}/lib/send_output.sh"
-echo "  * 5/8..."
-getfile "${URL}lib/set_commands_to_run.sh"        "${BASEDIR}/lib/set_commands_to_run.sh"
-echo "  * 6/8..."
-getfile "${URL}lib/set_environment.sh"            "${BASEDIR}/lib/set_environment.sh"
-echo "  * 7/8..."
-getfile "${URL}lib/set_os.sh"                     "${BASEDIR}/lib/set_os.sh"
-echo "  * 8/8..."
-getfile "${URL}lib/collect_available_commands.sh" "${BASEDIR}/lib/collect_available_commands.sh"
-
-echo "Downloading agent and support files..."
-echo "  * 1/3..."
-getfile "${URL}trafikito"       "${BASEDIR}/trafikito"
-echo "  * 2/3..."
-getfile "${URL}trafikito-agent" "${BASEDIR}/trafikito-agent"
-echo "  * 3/3..."
-getfile "${URL}reconfigure"     "${BASEDIR}/reconfigure"
+echo -n "Installing agent"
+for file in lib/available_commands.sh lib/trafikito-agent.sh reconfigure trafikito trafikito-agent trafikito_agent_install.sh; do
+    echo -n "."
+    getfile ${URL}$file ${BASEDIR}/$file
+done
+echo
 
 chmod +x "${BASEDIR}/trafikito" "${BASEDIR}/trafikito-agent" "${BASEDIR}/reconfigure"
 chown -R $RUNAS $BASEDIR

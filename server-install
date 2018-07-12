@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+
+# EDIT ME: where to install install script for download
+INSTALL=/var/www/html/trafikito
+
+# EDIT ME: where to install support scripts
+SCRIPTS=/var/www/html/trafikito
+
+# EDIT_ME: url to use for downloading scripts
+DOWNLOAD=http://tui.home/trafikito/
+
+Install=install.sh
+echo -n "Install $Install in $INSTALL or ^C: "; read x
+cp $Install $INSTALL
+
+Scripts="trafikito trafikito-agent reconfigure lib"
+echo -n "Install $Scripts in $SCRIPTS or ^C: "; read x
+cp -a $Scripts $SCRIPTS
+
+sed -i -e "s#DOWNLOAD_URL#$DOWNLOAD#" install.sh
