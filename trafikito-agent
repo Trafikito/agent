@@ -50,8 +50,6 @@ while true; do
         sec=`date +%S`
     done
     #x=`shuf -i 1-120 -n 1`
-    echo ""
-    echo "`date +%X` run started"
     . $BASEDIR/lib/trafikito-agent.sh
 
 done

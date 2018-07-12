@@ -39,38 +39,97 @@ echo ""
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
+# LUKAS: echo -n: this should work in any POSIX shell, if you see then -n on your terminal
+# it looks like a binary echo instead of a shell built in
+# Try: 'type echo', you should see
+# echo is a shell builtin
+# function to prompt for yn
+fn_prompt() {
+    mesg=$1
+    default=$2
+    while true; do
+        echo -n $mesg; read x
+        if [ -z "$x" ]; then
+            answer=$default
+        else
+            case "$x" in 
+                y*|Y*) answer=y ;;
+                n*|N*) answer=n ;;
+                *) echo "Please reply y or n"
+                continue
+            esac
+        fi
+        if [ $answer = $default ]; then
+            return 1
+        else
+            return 0
+        fi
+    done
+}
+
 if [ $# -ne 3 ]; then
-    echo "Usage: sh $0 <api_key> <server_id> <start_second>"
-    exit 1
+cat <<STOP
+Usage: sh $0 <api_key> <server_id> <start_second>"
+
+To install Trafikito agent you need to get server api key and server id."
+
+To get all the details please follow these steps:"
+  1. Visit https://trafikito.com/servers"
+  2. Find your server on servers list or add new one"
+  3. Click 3 dots button to open menu and select: How to install?"
+  4. Use this command (replace <api_key>, <server_id> and <start_second> with correct values):"
+     sh $0 <api_key> <server_id> <start_second>"
+
+STOP
+exit 1
 fi
+
 API_KEY=$1
 SERVER_ID=$2
 START_ON=$3
 
 # running as root or user ?
+# LUKAS: we can check if sudo is installed, but: we do not know if the user can sudo
+# su will always be installed, but to use 'su -c "sh $0"' will only work if
+# the user has root's password - another unknown
+# keep it like this?
 RUNAS="nobody"
 WHOAMI=`whoami`
 if [ "$WHOAMI" != "root" ]; then
 cat << STOP
-    You are not root: the preferred way to install trafikito 
-    is by using root. This will cause the agent to be run as
-    the user 'nobody' which will improve security.
-
-    To install as root either log in as root and execute the
-    script or use 'sudo sh $0'
+If possible, run installation as root user.
+Root user is used to make script running as 'nobody' which improves security.
+To install as root either log in as root and execute the script or use:
+  
+  sudo sh $0
 
 STOP
-    echo -n "Press ^C to exit and rerun or run agent as $WHOAMI: "; read x
+    fn_prompt "Continue as $WHOAMI [yN]: " 'n' || exit 1
     RUNAS=$WHOAMI
 fi
 
-# install
-export BASEDIR="`pwd`/trafikito"
-echo -n "Going to install trafikito in $BASEDIR (^C to change directory): "; read x
+# get BASEDIR
+export BASEDIR="/opt/trafikito"
+while true; do
+    fn_prompt "Going to install Trafikito in $BASEDIR [Yn]: " 'y'
+    if [ $? -eq 0 ]; then
+        echo -n "  Enter directory for installation: "; read BASEDIR
+        continue
+    fi
+    if [ -d $BASEDIR ]; then
+        fn_prompt "  Found existing $BASEDIR: okay to remove it? [Yn]: " 'y'
+        reason=`rm -rf $BASEDIR 2>&1`
+        if [ $? -ne 0 ]; then
+            echo "  Remove failed: $reason - please try again"
+            continue
+        fi
+    fi
+    break
+done
 
 mkdir $BASEDIR 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo -n "Found existing $BASEDIR: okay to remove it? (^C to break) "; read x
+    fn_prompt "Found existing $BASEDIR: okay to remove it? [Yn]: "; read x
     rm -rf $BASEDIR
     mkdir $BASEDIR || exit 1
 fi
@@ -92,6 +151,9 @@ export URL_OUTPUT=https://api.trafikito.com/v1/agent/output
 export URL_GET_CONFIG=https://api.trafikito.com/v1/agent/get
 STOP
 
+# LUKAS: for the moment I am going to assume that curl is the way to
+# go, but on Alpine Linux wget is installed by default and not curl :-)
+# Later...
 # at this stage curl may not be installed yet
 # but will need installBinary() later for reconfigure and not a good idea to
 # have the code at more than one place :-)
@@ -158,7 +220,7 @@ fi
 # TODO
 #URL="https://api.trafikito.com/v1/agent/get_agent_file?file="
 #URL="http://tui.home/trafikito/"
-URL=http://tui.home/trafikito/
+URL=DOWNLOAD_URL
 
 echo -n "Installing agent"
 for file in lib/available_commands.sh lib/trafikito-agent.sh reconfigure trafikito trafikito-agent trafikito_agent_install.sh; do
