@@ -9,7 +9,7 @@ SCRIPTS=/var/www/html/trafikito
 # EDIT_ME: url to use for downloading scripts
 DOWNLOAD=http://tui.home/trafikito/
 
-Install=install.sh
+Install=trafikito_agent_install.sh
 echo -n "Install $Install in $INSTALL or ^C: "; read x
 cp $Install $INSTALL
 

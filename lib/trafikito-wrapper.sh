@@ -26,13 +26,9 @@
 #  * SUCH DAMAGE.
 #  */
 
-# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent to allow for dynamic updates
+# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent.sh to allow for dynamic updates
 
-#export DEBUG=1
-
-if [ "$DEBUG" ]; then
-    export BASEDIR=tmp/trafikito
-else
+if [ -z "$BASEDIR" ]; then
     export BASEDIR="${0%/*}"
 fi
 
@@ -40,16 +36,17 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 INTERVAL=60   # run every minute
 
-# source configuration to get START_ON
-. $BASEDIR/etc/trafikito.cfg || exit 1
+# sleep random number of seconds (1-30) before starting
+sleep `shuf -i 1-30 -n 1`
 
 while true; do
-    sec=`date +%S`
-    while [ $sec -ne $START_ON ]; do
-        sleep 1
-        sec=`date +%S`
-    done
-    #x=`shuf -i 1-120 -n 1`
+    #sec=`date +%S`
+    #while [ $sec -ne $START_ON ]; do
+    #    sleep 1
+    #    sec=`date +%S`
+    #done
     . $BASEDIR/lib/trafikito-agent.sh
+    fn_main
 
+    sleep $INTERVAL
 done

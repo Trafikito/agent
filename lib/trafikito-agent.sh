@@ -27,10 +27,28 @@
 #  */
 
 # SYNOPSIS: The real trafikito agent
+DEBUG=1
 
-export AGENT_VERSION=14
+# this file is sourced by the install script that sets $INSTALLING to get fn_set_os
+if [ -z "$INSTALL" ]; then
 
-. $BASEDIR/lib/available_commands.sh || exit 1 # TODO the format of this file is DANGEROUS!
+    # agent version: simple integer will be compared as a number
+    export AGENT_VERSION=14
+    export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_get_available_commands
+
+    # Trafikito API URLs: these may change with different agent versions: do not store in config
+    export URL_OUTPUT="https://api.trafikito.com/v1/agent/output"
+    export URL_GET_CONFIG="https://api.trafikito.com/v2/agent/get"
+    export URL_DOWNLOAD=${URL_DOWNLOAD:-"https://api.trafikito.com/v1/agent/get_agent_file?file="}  # override from environment for testing
+
+    export LOGFILE=$BASEDIR/var/trafikito.log
+
+    # source config
+    . $BASEDIR/etc/trafikito.cfg
+
+    # source available commands
+    . "$BASEDIR/available_commands.sh"
+fi
 
 ###############################################################################
 # this will set variables "os", "os_codename", "os_release" and "centos_flavor"
@@ -129,41 +147,49 @@ fn_set_os() {
 ###################################################
 # functions to handle logs instead of using syslog
 ###################################################
-export LOGFILE=$BASEDIR/var/log
 
-log() {
+fn_log() {
     echo "`date +'%x %X'` $*" >>$LOGFILE
-    #test -z "DEBUG" || echo "`date +'%x %X'` $*"
+    test -z "DEBUG" || echo "`date +'%x %X'` $*"
 }
 
-debug() {
+fn_debug() {
     if [ "$DEBUG" ]; then
-        log $*
+        fn_log "DEBUG $*"
     fi
 }
 
 ##########################################################
-# function to get the commands to execute from the server
+# function to get:
+#   $COMMANDS_TO_RUN: commands to execute from Trafikito
+#   $AGENT_NEW_VERSION: current_agent_version for dynamic updates
+#   $CYCLE_DELAY: seconds to delay this cycle
 ##########################################################
 fn_set_commands_to_run() {
-    commands_to_run=`curl -s -X POST -H "Authorization: $API_KEY" \
-                    --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=os&osCodename=os_codename&osRelease=os_release&centosFlavor=centos_flavor" \
-                    "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
-    debug "commands to run $commands_to_run"
+    fn_debug SERVER ID = $SERVER_ID
+    data=`curl -s -X POST -H "Authorization: $API_KEY" \
+         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=os&osCodename=os_codename&osRelease=os_release&centosFlavor=centos_flavor" \
+         "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
+    set $data
+    COMMANDS_TO_RUN=$1
+    AGENT_NEW_VERSION=$2
+    CYCLE_DELAY=$3
+    
+    fn_debug COMMANDS_TO_RUN $COMMANDS_TO_RUN AGENT_NEW_VERSION $AGENT_NEW_VERSION CYCLE_DELAY $CYCLE_DELAY
 
-    tmp=`echo $commands_to_run | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
+    tmp=`echo $COMMANDS_TO_RUN | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
     if [ -n "$tmp" ]; then
         ERROR="Error: Do not call more then once per minute. ANOTHER_REQUEST_IN_PROGRESS"
         return 1
     fi
 
-    tmp=`echo "$commands_to_run" | grep "\"error\":{\"code\":\"#"`
+    tmp=`echo "$COMMANDS_TO_RUN" | grep "\"error\":{\"code\":\"#"`
     if [ -n "$tmp" ]; then
         ERROR="Error: Can not get commands to run: $tmp"
         return 1
     fi
         
-    if [ -z "$commands_to_run" ];
+    if [ -z "$COMMANDS_TO_RUN" ];
     then
         ERROR="Error: received empty config from Trafikito.com. Probably a network outage?"
         return 1
@@ -180,14 +206,14 @@ fn_execute_all_commands() {
     IFS=","
     # First in commands list is unique call token
     first="1"
-    echo "commands_to_run: $commands_to_run"
+    fn_debug "COMMANDS_TO_RUN: $COMMANDS_TO_RUN"
 
-    for cmd in $commands_to_run
+    for cmd in $COMMANDS_TO_RUN
     do
         if [ "$first" -ne "1" ]; then
-            log "Running: $cmd first: $first"
+            fn_log "Running: $cmd first: $first"
             fn_execute_trafikito_cmd "$cmd"
-            log "Running $cmd is done"
+            fn_log "Running $cmd is done"
         else
             CALL_TOKEN="$cmd"
         fi;
@@ -218,39 +244,35 @@ fn_execute_trafikito_cmd() {
     fi
 }
 
-##########################################
-# collect available commands into TMP_FILE
-##########################################
-fn_collect_available_commands() {
-    echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
-    cat "$BASEDIR/lib/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
-}
-
 ##################################################
 # start of main
 ##################################################
+fn_main() {
+    fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
+    fn_log "agent run started"
 
-fn_set_os
+    fn_set_os
 
-log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
-log "agent run started"
+    # get from trafikito:
+    #   commands to run from trafikito
+    fn_set_commands_to_run
 
-# gets commands to run from trafikito
-fn_set_commands_to_run
-if [ ! -z "$ERROR" ]; then
-    log $ERROR
-    log "Skipping this run"
-else
-    # create new tmp file
-    >$TMP_FILE
+    if [ ! -z "$ERROR" ]; then
+        fn_log $ERROR
+        fn_log "Skipping this run"
+    else
+        # create new tmp file
+        >$TMP_FILE
 
-    # Run commands and send results to tmp file
-    fn_execute_all_commands
+        # Run commands and send results to tmp file
+        fn_execute_all_commands
 
-    # collect available commands from available_commands.sh
-    fn_collect_available_commands
+        # collect available commands from available_commands.sh
+        echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
+        cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
-    # Send outputs to Trafikito API
-    curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" \
-         -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" --retry 3 --retry-delay 1 --max-time 30
-fi
+        # Send outputs to Trafikito API
+        curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" \
+             -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" --retry 3 --retry-delay 1 --max-time 30
+    fi
+}
