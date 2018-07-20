@@ -47,6 +47,10 @@ export URL_DOWNLOAD=${URL_DOWNLOAD:-"https://api.trafikito.com/v1/agent/get_agen
 fn_prompt() {
     default=$1
     mesg=$2
+    # if not running with a tty returns $default
+    if [ ! "`tty`" ]; then
+        return 1
+    fi
     while true; do
         echo -n $mesg; read x
         if [ -z "$x" ]; then
@@ -255,6 +259,9 @@ echo "* Downloading available_commands.sh (in this file you can find list of com
 curl -X POST -H "Content-Type: multipart/form-data" -F "output=@$TMP_FILE" -F "serverId=$SERVER_ID" \
      -F "os=$os" -F "osCodename=$os_codename" -F "osRelease=$os_release" -F "centosFlavor=$centos_flavor" "${URL_DOWNLOAD}available_commands.sh" \
      --retry 3 --retry-delay 1 --max-time 30 -o "${BASEDIR}/available_commands.sh"
+curl -s -X POST -F "apiKey=$API_KEY" -F "tmpFile=$TMP_FILE" -F "serverId=$SERVER_ID" "${URL_DOWNLOAD}trafikito.conf" \
+     --retry 3 --retry-delay 1 --max-time 30 > "${BASEDIR}/trafikito.conf"
+
 
 # configure restart
 if [ "$WHOAMI" != "root" ]; then

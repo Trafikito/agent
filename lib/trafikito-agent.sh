@@ -30,25 +30,32 @@
 DEBUG=1
 
 # this file is sourced by the install script that sets $INSTALLING to get fn_set_os
+# do not override environment, and available_commands.sh does not exist any more
 if [ -z "$INSTALL" ]; then
 
-    # agent version: simple integer will be compared as a number
-    export AGENT_VERSION=14
-    export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_get_available_commands
+# agent version: simple integer will be compared as a number
+export AGENT_VERSION=14
+export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_get_available_commands
 
-    # Trafikito API URLs: these may change with different agent versions: do not store in config
-    export URL_OUTPUT="https://api.trafikito.com/v1/agent/output"
-    export URL_GET_CONFIG="https://api.trafikito.com/v2/agent/get"
-    export URL_DOWNLOAD=${URL_DOWNLOAD:-"https://api.trafikito.com/v1/agent/get_agent_file?file="}  # override from environment for testing
+# Trafikito API URLs: these may change with different agent versions: do not store in config
+export URL_OUTPUT="https://api.trafikito.com/v1/agent/output"
+export URL_GET_CONFIG="https://api.trafikito.com/v1/agent/get"
+export URL_DOWNLOAD=${URL_DOWNLOAD:-"https://api.trafikito.com/v1/agent/get_agent_file?file="}  # override from environment for testing
 
-    export LOGFILE=$BASEDIR/var/trafikito.log
-
-    # source config
-    . $BASEDIR/etc/trafikito.cfg
-
-    # source available commands
-    . "$BASEDIR/available_commands.sh"
+# trim logfile to 100 lines
+export LOGFILE=$BASEDIR/var/trafikito.log
+if [ -f $LOGFILE ]; then
+    cp $LOGFILE $LOGFILE.bak
+    tail -n 100 $LOGFILE.bak >$LOGFILE
 fi
+
+# source config
+. $BASEDIR/etc/trafikito.cfg
+
+# source available commands
+. "$BASEDIR/available_commands.sh"
+
+fi  # -z "$INSTALL"
 
 ###############################################################################
 # this will set variables "os", "os_codename", "os_release" and "centos_flavor"
@@ -164,18 +171,33 @@ fn_debug() {
 #   $COMMANDS_TO_RUN: commands to execute from Trafikito
 #   $AGENT_NEW_VERSION: current_agent_version for dynamic updates
 #   $CYCLE_DELAY: seconds to delay this cycle
+#   $CALL_TOKEN: version 1
 ##########################################################
 fn_set_commands_to_run() {
-    fn_debug SERVER ID = $SERVER_ID
     data=`curl -s -X POST -H "Authorization: $API_KEY" \
-         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=os&osCodename=os_codename&osRelease=os_release&centosFlavor=centos_flavor" \
+         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
          "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
-    set $data
-    COMMANDS_TO_RUN=$1
-    AGENT_NEW_VERSION=$2
-    CYCLE_DELAY=$3
+    fn_debug "DATA = $data"
+    echo $URL_OUTPUT | grep -q "v2"
+    if [ $? ]; then
+        fn_debug "use v1 format"
+        COMMANDS_TO_RUN=`echo $data | sed -e 's#^[^,]*##' -e 's/,/ /g'`
+        CALL_TOKEN=`echo $data | sed -e 's#,.*##'`
+        AGENT_NEW_VERSION=14
+        CYCLE_DELAY=0
+    else
+        fn_debug "use v2 format"
+        set $data
+        COMMANDS_TO_RUN=$1
+        CALL_TOKEN='N/A'
+        AGENT_NEW_VERSION=$2
+        CYCLE_DELAY=$3
+    fi
     
-    fn_debug COMMANDS_TO_RUN $COMMANDS_TO_RUN AGENT_NEW_VERSION $AGENT_NEW_VERSION CYCLE_DELAY $CYCLE_DELAY
+    fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
+    fn_debug "    CALL_TOKEN $CALL_TOKEN"
+    fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
+    fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
 
     tmp=`echo $COMMANDS_TO_RUN | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
     if [ -n "$tmp" ]; then
@@ -203,21 +225,13 @@ fn_set_commands_to_run() {
 # execute all commands received from server
 ###########################################
 fn_execute_all_commands() {
-    IFS=","
-    # First in commands list is unique call token
-    first="1"
     fn_debug "COMMANDS_TO_RUN: $COMMANDS_TO_RUN"
 
     for cmd in $COMMANDS_TO_RUN
     do
-        if [ "$first" -ne "1" ]; then
-            fn_log "Running: $cmd first: $first"
-            fn_execute_trafikito_cmd "$cmd"
-            fn_log "Running $cmd is done"
-        else
-            CALL_TOKEN="$cmd"
-        fi;
-        first="0"
+        fn_log "Running $cmd"
+        fn_execute_trafikito_cmd "$cmd"
+        fn_log "Running $cmd is done"
     done
 }
 
@@ -271,8 +285,18 @@ fn_main() {
         echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
         cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
-        # Send outputs to Trafikito API
-        curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" \
-             -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" --retry 3 --retry-delay 1 --max-time 30
+        # test url version in use
+        echo $URL_OUTPUT | grep -q "v2"
+        if [ $? ]; then
+            fn_debug "use v1 url to send data to Trafikito"
+            curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" \
+                 --retry 3 --retry-delay 1 --max-time 30 > /dev/null 2>&1
+        else
+            fn_debug "use v2 url to send data to Trafikito"
+            curl -s -X POST -H "Authorization: $API_KEY" --data "serverId=$SERVER_ID" \
+                 -H "Content-Type: multipart/form-data" \
+                 -F "output=@$TMP_FILE" "$URL_OUTPUT" --retry 3 --retry-delay 1 --max-time 30
+        fi
+        fn_debug "DONE!"
     fi
 }
