@@ -71,24 +71,43 @@ fn_prompt() {
     done
 }
 
-if [ $# -ne 2 ]; then
-    echo "Usage: sh $0 <api_key> <server_id>"
+usage() {
+    (
     echo
-    echo "To install Trafikito agent you need to get server api key and server id."
+    echo "Usage: sh $0 --api_key=<api_key> --workspace_id=<workspace_id> [-name=<default name>]"
+    echo
+    echo "To install Trafikito agent you need to get server api key, workspace id, and (optional)"
+    echo "default name."
     echo
     echo "To get all the details please follow these steps:"
     echo "  1. Visit https://trafikito.com/servers"
     echo "  2. Find your server on servers list or add new one"
     echo "  3. Click 3 dots button to open menu and select: How to install?"
     echo "  4. Use this command (replace <api_key> and <server_id> with correct values):"
-    echo "     sh $0 <api_key> <server_id>"
+    echo "     sh $0 --api_key=<api_key> --workspace_id=<workspace_id> [-name=<default name>]"
+    ) 1>&2
     exit 1
-fi
+}
 
-API_KEY=$1
-SERVER_ID=$2
-START_ON=$3
+# parse arguments
+for x in $*; do
+    option=`echo $x | sed -e 's#=.*##'`
+    arg=`echo $x | sed -e 's#.*=##'`
+    case "$option" in
+        --api_key) API_KEY=$arg ;;
+        --workspace_id) WORKSPACE_ID=$arg ;;
+        --name) HOSTNAME=$arg ;;
+        *) echo "Bad option '$option'" 1>&2
+           usage
+    esac
+done
 
+test -z "$API_KEY"      && echo "Option '--api_key' with an argument is required" 1>&2 && usage
+test -z "$WORKSPACE_ID" && echo "Option '--workspace_id' with an argument is required" 1>&2 && usage
+HOSTNAME=${HOSTNAME:-`hostname -f`}
+
+echo "'$API_KEY' '$WORKSPACE_ID' '$HOSTNAME'"
+exit 1
 # running as root or user ?
 # LUKAS: we can check if sudo is installed, but: we do not know if the user can sudo
 # su will always be installed, but to use 'su -c "sh $0"' will only work if
