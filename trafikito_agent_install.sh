@@ -217,7 +217,7 @@ if [ -z "$TXFR" ]; then
 fi
 
 echo "* Looking for required commands..."
-TOOLLIST="tree cat date df expr free grep hostname lsof netstat pgrep sleep sed su shuf top uptime vmstat"
+TOOLLIST="tree cat date df expr free grep hostname lsof netstat pgrep sleep sed su top uptime vmstat"
 for tool in $TOOLLIST; do
     echo -n "  $tool: "
     x=`which $tool`
@@ -302,7 +302,7 @@ if [ -f /bin/systemd ]; then
         echo "After=systemd-user-sessions.service"
         echo "[Service]"
         echo "Type=simple"
-        echo "ExecStart=/opt/trafikito/trafikito-agent"
+        echo "ExecStart=$BASEDIR/lib/trafikito-wrapper"
         echo "User=nobody"
         echo "Group=nogroup"
         ) >/etc/systemd/system/trafikito.service
