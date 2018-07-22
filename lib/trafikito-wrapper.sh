@@ -36,9 +36,6 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 INTERVAL=60   # run every minute
 
-# sleep random number of seconds (1-30) before starting
-sleep `shuf -i 1-30 -n 1`
-
 while true; do
     #sec=`date +%S`
     #while [ $sec -ne $START_ON ]; do
