@@ -28,22 +28,27 @@
 
 # SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent.sh to allow for dynamic updates
 
-if [ -z "$BASEDIR" ]; then
-    export BASEDIR="${0%/*}"
-fi
+export BASEDIR=`echo $0 | sed -e 's#/lib/.*##'`
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-INTERVAL=60   # run every minute
-
+START_ON=`date +%S | sed s/^0//`
 while true; do
-    #sec=`date +%S`
-    #while [ $sec -ne $START_ON ]; do
-    #    sleep 1
-    #    sec=`date +%S`
-    #done
-    . $BASEDIR/lib/trafikito-agent.sh
-    fn_main
+    sec=`date +%S`
+    while [ $sec -ne $START_ON ]; do
+        sleep 1
+        sec=`date +%S`
+    done
 
-    sleep $INTERVAL
+    sh $BASEDIR/lib/trafikito-agent.sh
+    CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay`
+    sleep 1 # in case run takes less than 1 sec
+   
+    if [ $CYCLE_DELAY -gt 0 ]; then
+        echo -n "START_ON $START_ON -> "
+        START_ON=$((START_ON + CYCLE_DELAY))
+        START_ON=$((START_ON % 60))
+        echo $START_ON
+        #sleep 1  # force 60 sec delay
+    fi
 done

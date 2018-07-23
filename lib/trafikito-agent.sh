@@ -29,12 +29,10 @@
 # SYNOPSIS: The real trafikito agent
 DEBUG=1
 
-# this file is sourced by the install script that sets $INSTALLING to get fn_set_os
-# do not override environment, and available_commands.sh does not exist any more
-if [ -z "$INSTALL" ]; then
+export BASEDIR=`echo $0 | sed -e 's#/lib/.*##'`
 
-# agent version: simple integer will be compared as a number
-export AGENT_VERSION=14
+# agent version: will be compared as a string
+export AGENT_VERSION=15
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_get_available_commands
 
 # Trafikito API URLs: these may change with different agent versions: do not store in config
@@ -50,106 +48,14 @@ if [ -f $LOGFILE ]; then
 fi
 
 # source config
-. $BASEDIR/etc/trafikito.cfg
+. $BASEDIR/etc/trafikito.cfg || exit 1
 
 # source available commands
-. "$BASEDIR/available_commands.sh"
+# TODO make this more robust!
+. "$BASEDIR/available_commands.sh" || exit 1
 
-fi  # -z "$INSTALL"
-
-###############################################################################
-# this will set variables "os", "os_codename", "os_release" and "centos_flavor"
-###############################################################################
-fn_set_os() {
-    
-    centos_flavor="centos"
-    
-    # Use lsb_release if possible
-    if command -V lsb_release > /dev/null 2>&1; then
-        os=`lsb_release -is | tr '[:upper:]' '[:lower:]'`
-        os_codename=`lsb_release -cs | tr '[:upper:]' '[:lower:]'`
-        os_release=`lsb_release -rs | sed 's/\..*$//'`
-        
-        if [ "$os" = "redhatenterpriseserver" -o "$os" = "oracleserver" ]; then
-            os="centos"
-            centos_flavor="red hat linux"
-        fi
-        # Otherwise it's getting a little bit more tricky
-    else
-        if ! ls /etc/*-release > /dev/null 2>&1; then
-            os=`uname -s | \
-            tr '[:upper:]' '[:lower:]'`
-        else
-            os=`cat /etc/*-release | grep '^ID=' | \
-            sed 's/^ID=["]*\([a-zA-Z]*\).*$/\1/' | \
-            tr '[:upper:]' '[:lower:]'`
-            
-            if [ -z "$os" ]; then
-                if grep -i "oracle linux" /etc/*-release > /dev/null 2>&1 || \
-                grep -i "red hat" /etc/*-release > /dev/null 2>&1; then
-                    os="rhel"
-                else
-                    if grep -i "centos" /etc/*-release > /dev/null 2>&1; then
-                        os="centos"
-                    else
-                        os="linux"
-                    fi
-                fi
-            fi
-        fi
-        
-        case "$os" in
-            ubuntu)
-                os_codename=`cat /etc/*-release | grep '^DISTRIB_CODENAME' | \
-                sed 's/^[^=]*=\([^=]*\)/\1/' | \
-                tr '[:upper:]' '[:lower:]'`
-            ;;
-            debian)
-                os_codename=`cat /etc/*-release | grep '^VERSION=' | \
-                sed 's/.*(\(.*\)).*/\1/' | \
-                tr '[:upper:]' '[:lower:]'`
-            ;;
-            centos)
-                os_codename=`cat /etc/*-release | grep -i 'centos.*(' | \
-                sed 's/.*(\(.*\)).*/\1/' | head -1 | \
-                tr '[:upper:]' '[:lower:]'`
-                # For CentOS grab release
-                os_release=`cat /etc/*-release | grep -i 'centos.*[0-9]' | \
-                sed 's/^[^0-9]*\([0-9][0-9]*\).*$/\1/' | head -1`
-            ;;
-            rhel|ol)
-                os_codename=`cat /etc/*-release | grep -i 'red hat.*(' | \
-                sed 's/.*(\(.*\)).*/\1/' | head -1 | \
-                tr '[:upper:]' '[:lower:]'`
-                # For Red Hat also grab release
-                os_release=`cat /etc/*-release | grep -i 'red hat.*[0-9]' | \
-                sed 's/^[^0-9]*\([0-9][0-9]*\).*$/\1/' | head -1`
-                
-                if [ -z "$release" ]; then
-                    os_release=`cat /etc/*-release | grep -i '^VERSION_ID=' | \
-                    sed 's/^[^0-9]*\([0-9][0-9]*\).*$/\1/' | head -1`
-                fi
-                
-                os="centos"
-                centos_flavor="red hat linux"
-            ;;
-            amzn)
-                os_codename="amazon-linux-ami"
-                release_amzn=`cat /etc/*-release | grep -i 'amazon.*[0-9]' | \
-                sed 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*$/\1/' | \
-                head -1`
-                os_release="latest"
-                
-                os="amzn"
-                centos_flavor="amazon linux"
-            ;;
-            *)
-                os_codename=""
-                os_release=""
-            ;;
-        esac
-    fi
-}
+# source function to set os facts || exit 1
+. $BASEDIR/lib/set_os.sh
 
 ###################################################
 # functions to handle logs instead of using syslog
@@ -198,6 +104,10 @@ fn_set_commands_to_run() {
     fn_debug "    CALL_TOKEN $CALL_TOKEN"
     fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
     fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
+
+    # save CYCLE_DELAY for wrapper
+    #CYCLE_DELAY=2
+    echo $CYCLE_DELAY >$BASEDIR/var/cycle_delay
 
     tmp=`echo $COMMANDS_TO_RUN | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
     if [ -n "$tmp" ]; then
@@ -261,42 +171,47 @@ fn_execute_trafikito_cmd() {
 ##################################################
 # start of main
 ##################################################
-fn_main() {
-    fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
-    fn_log "agent run started"
+fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
+fn_log "agent run started"
 
-    fn_set_os
+fn_set_os
 
-    # get from trafikito:
-    #   commands to run from trafikito
-    fn_set_commands_to_run
+# get from trafikito:
+#   commands to run from trafikito
+fn_set_commands_to_run
 
-    if [ ! -z "$ERROR" ]; then
-        fn_log $ERROR
-        fn_log "Skipping this run"
+if [ ! -z "$ERROR" ]; then
+    fn_log $ERROR
+    fn_log "Skipping this run"
+else
+    # create new tmp file
+    >$TMP_FILE
+
+    # Run commands and send results to tmp file
+    fn_execute_all_commands
+
+    # collect available commands from available_commands.sh
+    echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
+    cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
+
+    # test url version in use
+    echo $URL_OUTPUT | grep -q "v2"
+    if [ $? ]; then
+        fn_debug "use v1 url to send data to Trafikito"
+        curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" \
+             --retry 3 --retry-delay 1 --max-time 30 > /dev/null 2>&1
     else
-        # create new tmp file
-        >$TMP_FILE
-
-        # Run commands and send results to tmp file
-        fn_execute_all_commands
-
-        # collect available commands from available_commands.sh
-        echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
-        cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
-
-        # test url version in use
-        echo $URL_OUTPUT | grep -q "v2"
-        if [ $? ]; then
-            fn_debug "use v1 url to send data to Trafikito"
-            curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" \
-                 --retry 3 --retry-delay 1 --max-time 30 > /dev/null 2>&1
-        else
-            fn_debug "use v2 url to send data to Trafikito"
-            curl -s -X POST -H "Authorization: $API_KEY" --data "serverId=$SERVER_ID" \
-                 -H "Content-Type: multipart/form-data" \
-                 -F "output=@$TMP_FILE" "$URL_OUTPUT" --retry 3 --retry-delay 1 --max-time 30
-        fi
-        fn_debug "DONE!"
+        fn_debug "use v2 url to send data to Trafikito"
+        curl -s -X POST -H "Authorization: $API_KEY" --data "serverId=$SERVER_ID" \
+             -H "Content-Type: multipart/form-data" \
+             -F "output=@$TMP_FILE" "$URL_OUTPUT" --retry 3 --retry-delay 1 --max-time 30
     fi
-}
+    fn_debug "DONE!"
+
+    # test if need to upgrade/downgrade agent
+    if [ $AGENT_VERSION != $AGENT_NEW_VERSION ]; then
+        fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
+        # TODO
+        fn_log "  TODO: download lib/*!"
+    fi
+fi

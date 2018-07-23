@@ -107,7 +107,11 @@ test -z "$WORKSPACE_ID" && echo "Option '--workspace_id' with an argument is req
 HOSTNAME=${HOSTNAME:-`hostname -f`}
 
 echo "'$API_KEY' '$WORKSPACE_ID' '$HOSTNAME'"
-exit 1
+
+# TODO testing
+API_KEY="bcdfcfb21aaceebd99882a55155f3f3bb9589ba6L1"
+SERVER_ID="4c3c20fb-6542-4c96-a736-e54a1240ec8a"
+
 # running as root or user ?
 # LUKAS: we can check if sudo is installed, but: we do not know if the user can sudo
 # su will always be installed, but to use 'su -c "sh $0"' will only work if
@@ -234,8 +238,9 @@ echo "* Installing agent..."
 curl -X POST --retry 3 --retry-delay 1 --max-time 30 \
      -o "${BASEDIR}/trafikito"                "${URL_DOWNLOAD}/trafikito" \
      -o "${BASEDIR}/lib/trafikito-wrapper.sh" "${URL_DOWNLOAD}lib/trafikito-wrapper.sh" \
-     -o "${BASEDIR}/lib/trafikito-agent.sh"   "${URL_DOWNLOAD}lib/trafikito-agent.sh"
-echo CURL EXIT = $?
+     -o "${BASEDIR}/lib/trafikito-agent.sh"   "${URL_DOWNLOAD}lib/trafikito-agent.sh" \
+     -o "${BASEDIR}/lib/set_os.sh"            "${URL_DOWNLOAD}lib/set_os.sh"
+echo
 
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 chown -R $RUNAS $BASEDIR
@@ -263,13 +268,14 @@ trafikito_top="top -bcn1"
 STOP
 ) | while read line; do
     command=`echo $line | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
+    echo "  executing $command..."
     echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
     eval $command >>$TMP_FILE 2>&1
 done
 
-# need os parameters here
-export INSTALL=1
-. $BASEDIR/lib/trafikito-agent.sh
+# get os facts
+echo -n "DEBUG"; ls $BASEDIR/lib/set_os.sh; echo
+. $BASEDIR/lib/set_os.sh
 fn_set_os
 
 # TODO using real $URL_DOWNLOAD here
