@@ -26,10 +26,16 @@
 #  * SUCH DAMAGE.
 #  */
 
+# basedir is $1 to enable this to run from anywhere
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <trafikito base dir>" 1>&2
+    exit 1
+fi
+export BASEDIR=$1
+
 # SYNOPSIS: The real trafikito agent
 DEBUG=1
 
-export BASEDIR=`echo $0 | sed -e 's#/lib/.*##'`
 
 # agent version: will be compared as a string
 export AGENT_VERSION=15
@@ -42,10 +48,10 @@ export URL_DOWNLOAD=${URL_DOWNLOAD:-"https://api.trafikito.com/v1/agent/get_agen
 
 # trim logfile to 100 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
-if [ -f $LOGFILE ]; then
-    cp $LOGFILE $LOGFILE.bak
-    tail -n 100 $LOGFILE.bak >$LOGFILE
-fi
+#if [ -f $LOGFILE ]; then
+#    cp $LOGFILE $LOGFILE.bak
+#    tail -n 100 $LOGFILE.bak >$LOGFILE
+#fi
 
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1

@@ -3,7 +3,7 @@
 export BASEDIR="${0%/*}"
 
 # source config file
-. $BASEDIR/etc/trafikito.cfg
+. $BASEDIR/etc/trafikito.cfg || exit 1
 
 export PIDFILE=$BASEDIR/var/trafikito.pid
 export AGENTNAME=trafikito-wrapper.sh

@@ -1,5 +1,3 @@
-#!/usr/bin/env sh
-
 # /*
 #  * Copyright (C) Trafikito.com
 #  * All rights reserved.
@@ -26,34 +24,27 @@
 #  * SUCH DAMAGE.
 #  */
 
-# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent.sh to allow for dynamic updates
+echo ""
+echo ""
+echo "  _____           __ _ _    _ _"
+echo " |_   _| __ __ _ / _(_) | _(_) |_ ___"
+echo "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
+echo "   | || | | (_| |  _| |   <| | || (_) |"
+echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
+echo ""
+echo ""
+echo "    Trafikito.com agent installation"
+echo ""
+echo ""
 
-# basedir is $1 to enable this to run from anywhere
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <trafikito base dir>" 1>&2
-    exit 1
-fi
-export BASEDIR=$1
-
+BASEDIR="${0%/*}"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-START_ON=`date +%S | sed s/^0//`
-while true; do
-    sec=`date +%S`
-    while [ $sec -ne $START_ON ]; do
-        sleep 1
-        sec=`date +%S`
-    done
+# remove systemd config
+if [ -f /etc/systemd/system/trafikito ]; then
+    systemctl disable trafikito
+    rm /etc/systemd/system/trafikito
+fi
 
-    sh $BASEDIR/lib/trafikito-agent.sh $BASEDIR
-    CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay`
-    sleep 1 # in case run takes less than 1 sec
-   
-    if [ $CYCLE_DELAY -gt 0 ]; then
-        echo -n "START_ON $START_ON -> "
-        START_ON=$((START_ON + CYCLE_DELAY))
-        START_ON=$((START_ON % 60))
-        echo $START_ON
-        #sleep 1  # force 60 sec delay
-    fi
-done
+# now remove everything in BASEDIR
+echo rm -r $BASEDIR

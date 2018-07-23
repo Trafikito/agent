@@ -237,6 +237,7 @@ done
 echo "* Installing agent..."
 curl -X POST --retry 3 --retry-delay 1 --max-time 30 \
      -o "${BASEDIR}/trafikito"                "${URL_DOWNLOAD}/trafikito" \
+     -o "${BASEDIR}/uninstall.sh"             "${URL_DOWNLOAD}/uninstall.sh" \
      -o "${BASEDIR}/lib/trafikito-wrapper.sh" "${URL_DOWNLOAD}lib/trafikito-wrapper.sh" \
      -o "${BASEDIR}/lib/trafikito-agent.sh"   "${URL_DOWNLOAD}lib/trafikito-agent.sh" \
      -o "${BASEDIR}/lib/set_os.sh"            "${URL_DOWNLOAD}lib/set_os.sh"
@@ -305,14 +306,16 @@ if [ -f /bin/systemd ]; then
         (
         echo "[Unit]"
         echo "Description=Trafikito Service"
-        echo "After=systemd-user-sessions.service"
+        echo "After=network.target"
         echo "[Service]"
         echo "Type=simple"
-        echo "ExecStart=$BASEDIR/lib/trafikito-wrapper"
+        echo "ExecStart=$BASEDIR/lib/trafikito-wrapper.sh $BASEDIR"
         echo "User=nobody"
         echo "Group=nogroup"
+        echo "[Install]"
+        echo "WantedBy=multi-user.target"
         ) >/etc/systemd/system/trafikito.service
-        # TODO systemctl enable trafikito
+        systemctl enable trafikito
         systemctl start trafikito
         systemctl status trafikito
         exit 0
