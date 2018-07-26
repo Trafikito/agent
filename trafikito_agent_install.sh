@@ -42,6 +42,7 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export URL_OUTPUT="https://api.trafikito.com/v2/agent/output"
 export URL_GET_CONFIG="https://api.trafikito.com/v2/agent/get"
 export URL_DOWNLOAD=${URL_DOWNLOAD:-"https://api.trafikito.com/v1/agent/get_agent_file?file="}  # override from environment for testing
+export URL_DOWNLOAD=http://tui.home/trafikito/
 
 # function to prompt for yn: echo is a shell builtin and the -n option should work in any POSIX shell
 fn_prompt() {
@@ -90,27 +91,27 @@ usage() {
 }
 
 # parse arguments
-for x in $*; do
-    option=`echo $x | sed -e 's#=.*##'`
-    arg=`echo $x | sed -e 's#.*=##'`
-    case "$option" in
-        --api_key) API_KEY=$arg ;;
-        --workspace_id) WORKSPACE_ID=$arg ;;
-        --name) HOSTNAME=$arg ;;
-        *) echo "Bad option '$option'" 1>&2
-           usage
-    esac
-done
+#for x in $*; do
+#    option=`echo $x | sed -e 's#=.*##'`
+#    arg=`echo $x | sed -e 's#.*=##'`
+#    case "$option" in
+#        --api_key) API_KEY=$arg ;;
+#        --workspace_id) WORKSPACE_ID=$arg ;;
+#        --name) HOSTNAME=$arg ;;
+#        *) echo "Bad option '$option'" 1>&2
+#           usage
+#    esac
+#done
 
-test -z "$API_KEY"      && echo "Option '--api_key' with an argument is required" 1>&2 && usage
-test -z "$WORKSPACE_ID" && echo "Option '--workspace_id' with an argument is required" 1>&2 && usage
+#test -z "$API_KEY"      && echo "Option '--api_key' with an argument is required" 1>&2 && usage
+#test -z "$WORKSPACE_ID" && echo "Option '--workspace_id' with an argument is required" 1>&2 && usage
 HOSTNAME=${HOSTNAME:-`hostname -f`}
 
 echo "'$API_KEY' '$WORKSPACE_ID' '$HOSTNAME'"
 
 # TODO testing
-API_KEY="bcdfcfb21aaceebd99882a55155f3f3bb9589ba6L1"
-SERVER_ID="4c3c20fb-6542-4c96-a736-e54a1240ec8a"
+API_KEY=$1
+SERVER_ID=$2
 
 # running as root or user ?
 # LUKAS: we can check if sudo is installed, but: we do not know if the user can sudo
@@ -175,63 +176,71 @@ export TMP_FILE=$BASEDIR/var/trafikito.tmp
 STOP
 . $BASEDIR/etc/trafikito.cfg
 
-# function to install a binary (just in case some binaries are in a package)
-fn_install_binary() {
-    binary=$1
-    package=$binary
+# function to install a tool
+fn_install_tool() {
+    tool=$1
+    help=$2
+    pkg=$tool  # in case $tool is in a package
+    echo -n "  $tool - $help: "
 
-    if [ \`whoami\` != 'root' ]; then
-        echo "Sorry! Need root privilege to install '$binary'"
-        echo "You have to install it manually"
+    # check if command is installed
+    x=`which $tool`
+    if [ -z "$x" ]; then
+        echo "not found - going to install it"
+    else
+        echo "found $x"
+        return 0
+    fi
+
+    if [ $WHOAMI != 'root' ]; then
+        echo -n "  Need root privilege to install '$pkg': please install it manually [enter]: "; read x
         return
     fi
 
-    fn_prompt "Y" "  Attempt to install package $package [Yn]: "
+    fn_prompt "Y" "  Install package $pkg [Yn]: "
     if [ $? -eq 0 ]; then
-        return
+        return 1
     fi
     if [ -x /usr/bin/apt-get ]; then # Debian
-        /usr/bin/apt-get -y install $package
-        return `which $binary`
+        /usr/bin/apt-get -y install $pkg
     elif [ -x /usr/bin/yum ]; then # RedHat
-        /usr/bin/yum -y install $package
-        return `which $binary`
+        /usr/bin/yum -y install $pkg
     elif [ -x /sbin/apk ]; then # alpine
-        /sbin/apk -y install $package
-        return `which $binary`
+        /sbin/apk --no-cache add $pkg
     else
-        echo "ERROR: this system's package manager is not supported"
-        exit 1
+        echo "  ERROR: this system's package manager is not supported"
+        echo "    Please contact trafikito support for help"  # TODO
+        return 1
+    fi
+    if [ $? ]; then
+        echo "  Something went wrong: please contact trafikito support for help"  # TODO
+        return 1
+    else
+        echo "  installed `which $tool`"
+        return 0
     fi
 }
 
 # install curl
 echo -n "Checking for curl..."
-curl=`which curl`
-if [ -z $curl ]; then
-    echo "not found"
-    TXFR=`fn_install_binary curl`
-else
-    echo "found $curl"
-    TXFR=$curl
-fi
-if [ -z "$TXFR" ]; then
-    echo "  Looks like your distro does not have curl: please contact trafikito support"  # TODO
+fn_install_tool "curl" "transfer an url"
+if [ $? -ne 0 ]; then
+    echo "  Looks like your distro does not have curl: please contact trafikito support"
     exit 1
 fi
 
 echo "* Looking for required commands..."
-TOOLLIST="tree cat date df expr free grep hostname lsof netstat pgrep sleep sed su top uptime vmstat"
-for tool in $TOOLLIST; do
-    echo -n "  $tool: "
-    x=`which $tool`
-    if [ -z "$x" ]; then
-        echo "not found - going to install it"
-        installBinary $tool
-    else
-        echo "found $x"
-    fi
-done
+fn_install_tool "tree"   "test command not used in trafikito"
+fn_install_tool "df"     "report file system disk space usage"
+fn_install_tool "free"   "report amount of free and used memory in the system"
+fn_install_tool "egrep"  "print lines matching a pattern"
+fn_install_tool "pgrep"  "look up or signal processes based on name and other attributes"
+fn_install_tool "lsof"   "list open files"
+fn_install_tool "sed"    "stream editor for filtering and transforming text"
+fn_install_tool "su"     "change user ID or become superuser"
+fn_install_tool "top"    "display processes"
+fn_install_tool "uptime" "tell how long the system has been running"
+fn_install_tool "vmstat" "report virtual memory statistics"
 
 
 echo "* Installing agent..."
@@ -244,7 +253,6 @@ curl -X POST --retry 3 --retry-delay 1 --max-time 30 \
 echo
 
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
-chown -R $RUNAS $BASEDIR
 
 # build initial settings
 echo "* Generating initial settings"
@@ -253,7 +261,7 @@ echo "* Generating initial settings"
 cat <<STOP
 trafikito_free="free"
 trafikito_cpu_info_full="cat /proc/cpuinfo | sed '/^\s*$/q'"
-trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | grep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
+trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | egrep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
 trafikito_uptime="uptime"
 trafikito_cpu_units_count="cat /proc/cpuinfo 2>&1 | grep processor | wc -l"
 trafikito_vmstat="vmstat"
@@ -275,7 +283,6 @@ STOP
 done
 
 # get os facts
-echo -n "DEBUG"; ls $BASEDIR/lib/set_os.sh; echo
 . $BASEDIR/lib/set_os.sh
 fn_set_os
 
@@ -288,6 +295,8 @@ curl -X POST -H "Content-Type: multipart/form-data" -F "output=@$TMP_FILE" -F "s
 curl -s -X POST -F "apiKey=$API_KEY" -F "tmpFile=$TMP_FILE" -F "serverId=$SERVER_ID" "${URL_DOWNLOAD}trafikito.conf" \
      --retry 3 --retry-delay 1 --max-time 30 > "${BASEDIR}/trafikito.conf"
 
+# now everything will be owned by $RUNAS
+chown -R $RUNAS $BASEDIR
 
 # configure restart
 if [ "$WHOAMI" != "root" ]; then
@@ -298,8 +307,9 @@ if [ "$WHOAMI" != "root" ]; then
     exit 0
 fi
 
-# systemd
-if [ -f /bin/systemd ]; then
+# systemd: test for useable systemctl
+x=`which systemctl`
+if [ $? -eq 0 ]; then
     echo "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then

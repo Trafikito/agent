@@ -32,12 +32,12 @@ getstatus() {
     if [ -f $PIDFILE ]; then
         PID=`cat $PIDFILE`
         # agent running ?
-        cmd=`ps -p $PID -o cmd=`
-        if [ "$cmd" ]; then
-            STATUS=1
-        else
-            STATUS=2
-        fi
+        ps -a -o pid | grep $PID >/dev/null
+        if [ $? -eq 0 ]; then        
+            STATUS=1         
+        else                 
+            STATUS=2         
+        fi             
     else
         # check if agent is running uncontrolled
         PID=`pgrep -f $AGENTNAME`
@@ -56,9 +56,14 @@ start() {
         status
         exit 1
     fi
-    #sudo -u $RUNAS nohup $BASEDIR/lib/$AGENTNAME 2>&1 &
-    $BASEDIR/lib/$AGENTNAME $BASEDIR &
-    echo -n $! >$PIDFILE
+    if [ `whoami` = 'root' ]; then
+        su -s /bin/sh -c "$BASEDIR/lib/$AGENTNAME $BASEDIR" nobody &
+        echo -n $! >$PIDFILE
+        chown $RUNAS $PIDFILE
+    else
+        $BASEDIR/lib/$AGENTNAME $BASEDIR &
+        echo -n $! >$PIDFILE
+    fi
     status
 }
 
@@ -69,7 +74,9 @@ stop() {
         status
         exit 1
     fi
-    kill $PID
+    # kill everything matching lib/trafikito-
+    PIDS=`pgrep -f 'lib/trafikito-'`
+    kill -9 $PIDs
     rm -f $PIDFILE
     status
 }

@@ -54,6 +54,5 @@ while true; do
         START_ON=$((START_ON + CYCLE_DELAY))
         START_ON=$((START_ON % 60))
         echo $START_ON
-        #sleep 1  # force 60 sec delay
     fi
 done

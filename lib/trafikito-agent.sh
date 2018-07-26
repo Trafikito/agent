@@ -34,11 +34,11 @@ fi
 export BASEDIR=$1
 
 # SYNOPSIS: The real trafikito agent
-DEBUG=1
+DEBUG=
 
 
 # agent version: will be compared as a string
-export AGENT_VERSION=15
+export AGENT_VERSION=20
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_get_available_commands
 
 # Trafikito API URLs: these may change with different agent versions: do not store in config
@@ -69,7 +69,6 @@ export LOGFILE=$BASEDIR/var/trafikito.log
 
 fn_log() {
     echo "`date +'%x %X'` $*" >>$LOGFILE
-    test -z "DEBUG" || echo "`date +'%x %X'` $*"
 }
 
 fn_debug() {
@@ -137,20 +136,6 @@ fn_set_commands_to_run() {
     return 0
 }
 
-###########################################
-# execute all commands received from server
-###########################################
-fn_execute_all_commands() {
-    fn_debug "COMMANDS_TO_RUN: $COMMANDS_TO_RUN"
-
-    for cmd in $COMMANDS_TO_RUN
-    do
-        fn_log "Running $cmd"
-        fn_execute_trafikito_cmd "$cmd"
-        fn_log "Running $cmd is done"
-    done
-}
-
 ##########################
 # execute a single command
 ##########################
@@ -194,7 +179,12 @@ else
     >$TMP_FILE
 
     # Run commands and send results to tmp file
-    fn_execute_all_commands
+    for cmd in $COMMANDS_TO_RUN
+    do
+        fn_log "Running $cmd"
+        fn_execute_trafikito_cmd "$cmd"
+        fn_log "  $cmd is done"
+    done
 
     # collect available commands from available_commands.sh
     echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
