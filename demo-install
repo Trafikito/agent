@@ -2,4 +2,4 @@
 
 export URL_DOWNLOAD=http://tui.home/trafikito/
 
-./trafikito_agent_install.sh bcdfcfb21aaceebd99882a55155f3f3bb9589ba6L1 4c3c20fb-6542-4c96-a736-e54a1240ec8a
+sudo ./trafikito_agent_install.sh 583a3f23c2ce7c52887c9f12299cd407014300e0Mb 715b8600-13d8-4040-b9ee-90bdf32d1329
