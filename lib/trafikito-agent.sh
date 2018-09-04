@@ -26,8 +26,6 @@
 #  * SUCH DAMAGE.
 #  */
 
-export API_VERSION=2
-
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <trafikito base dir>" 1>&2
@@ -44,28 +42,20 @@ export AGENT_VERSION=14
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
-if [ $API_VERSION -eq 1 ]; then
-    export URL_OUTPUT="https://api.trafikito.com/v1/agent/output"
-    export URL_GET_CONFIG="https://api.trafikito.com/v1/agent/get"
-    export URL_DOWNLOAD="https://api.trafikito.com/v1/agent/get_agent_file?file="
-elif [ $API_VERSION -eq 2 ]; then
-    export URL_OUTPUT="http://34.237.110.120/v2/agent/output"
-    export URL_GET_CONFIG="http://34.237.110.120/v2/agent/get"
-    export URL_DOWNLOAD="http://34.237.110.120/v2/agent/get_agent_file?file="
-else
-    echo "NO API_VERSION!"
-    exit 1
-fi
+URL="https://ap-southeast-1.api.trafikito.com"
+export URL_OUTPUT="$URL/v2/agent/output"
+export URL_GET_CONFIG="$URL/v2/agent/get"
+export URL_DOWNLOAD="$URL/v2/agent/get_agent_file?file="
 
 # for pgp testing TODO
 export URL_DOWNLOAD=http://tui.home/trafikito/
 
 # trim logfile to 100 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
-#if [ -f $LOGFILE ]; then
-#    cp $LOGFILE $LOGFILE.bak
-#    tail -n 100 $LOGFILE.bak >$LOGFILE
-#fi
+if [ -f $LOGFILE ]; then
+    cp $LOGFILE $LOGFILE.bak
+    tail -n 100 $LOGFILE.bak >$LOGFILE
+fi
 
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1
@@ -99,30 +89,19 @@ fn_debug() {
 #   $CALL_TOKEN: version 1
 ##########################################################
 fn_set_commands_to_run() {
-    fn_debug "use api version v$API_VERSION"
-    if [ $API_VERSION -eq 1 ]; then
-        data=`curl -s -X POST -H "Authorization: $API_KEY" \
-             --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
-             "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
-        fn_debug "DATA = $data"
-        COMMANDS_TO_RUN=`echo $data | sed -e 's#^[^,]*##' -e 's/,/ /g'`
-        CALL_TOKEN=`echo $data | sed -e 's#,.*##'`
-        AGENT_NEW_VERSION=14
-        CYCLE_DELAY=0
-    else
-        echo curl -s -X POST -H "Authorization: $API_KEY" \
-             --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
-             "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30
-        data=`curl -s -X POST -H "Authorization: $API_KEY" \
-             --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
-             "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
-        fn_debug "DATA = $data"
-        set $data
-        COMMANDS_TO_RUN=$1
-        CALL_TOKEN='N/A'
-        AGENT_NEW_VERSION=$2
-        CYCLE_DELAY=$3
-    fi
+    echo curl -s -X POST -H "Authorization: $USER_API_KEY" \
+         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
+         "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30
+    exit 1
+    data=`curl -s -X POST -H "Authorization: $USER_API_KEY" \
+         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
+         "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
+    fn_debug "DATA = $data"
+    set $data
+    COMMANDS_TO_RUN=$1
+    CALL_TOKEN='N/A'
+    AGENT_NEW_VERSION=$2
+    CYCLE_DELAY=$3
     
     fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
     fn_debug "    CALL_TOKEN $CALL_TOKEN"
