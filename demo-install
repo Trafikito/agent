@@ -1,5 +1,0 @@
-#!/usr/bin/env sh
-
-export URL_DOWNLOAD=http://tui.home/trafikito/
-
-sudo ./trafikito_agent_install.sh 583a3f23c2ce7c52887c9f12299cd407014300e0Mb 715b8600-13d8-4040-b9ee-90bdf32d1329

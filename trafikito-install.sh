@@ -50,7 +50,7 @@ fn_prompt() {
         return 1
     fi
     while true; do
-        $ECHO -n $mesg; read x
+        $ECHO -n "$mesg "; read x
         if [ -z "$x" ]; then
             answer=$default
         else
@@ -130,6 +130,11 @@ while true; do
     fn_prompt "Y" "Going to install Trafikito in $BASEDIR [Yn]: "
     if [ $? -eq 0 ]; then
         echo -n "  Enter directory for installation: "; read BASEDIR
+        echo $BASEDIR | grep -q '^\/'
+        if [ $? -ne 0 ]; then
+            echo "Directory for installation must be an absolute path"
+            BASEDIR="/opt/trafikito"
+        fi
         continue
     fi
     if [ -d $BASEDIR ]; then
@@ -254,34 +259,6 @@ echo
 
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 
-# build initial settings
-echo "* Generating initial settings"
->$TMP_FILE
-(
-cat <<STOP
-trafikito_free="free"
-trafikito_cpu_info_full="cat /proc/cpuinfo | sed '/^\s*$/q'"
-trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | egrep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
-trafikito_uptime="uptime"
-trafikito_cpu_units_count="cat /proc/cpuinfo 2>&1 | grep processor | wc -l"
-trafikito_vmstat="vmstat"
-trafikito_df_p="df -P"
-trafikito_hostname="hostname"
-trafikito_curl="curl --version"
-trafikito_df_h="df -h"
-trafikito_lsof_count_network_connections="lsof -i | grep -- '->' | wc -l"
-trafikito_lsof_count_open_files="lsof | wc -l"
-trafikito_netstat_i="netstat -i"
-trafikito_vmstat_s="vmstat -s"
-trafikito_top="top -bcn1"
-STOP
-) | while read line; do
-    command=`echo $line | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
-    echo "  executing $command..."
-    echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
-    eval $command >>$TMP_FILE 2>&1
-done
-
 # get os facts
 . $BASEDIR/lib/set_os.sh
 fn_set_os
@@ -310,19 +287,49 @@ export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
 echo export SERVER_ID=\"$SERVER_ID\" >>$CONFIG
 echo export API_KEY=\"$API_KEY\"     >>$CONFIG
 
-echo "'$SERVER_ID'"
-echo "'$API_KEY'"
+echo "* Generating initial settings"
+>$TMP_FILE
+(
+cat <<STOP
+trafikito_free="free"
+trafikito_cpu_info_full="cat /proc/cpuinfo | sed '/^\s*$/q'"
+trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | egrep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
+trafikito_uptime="uptime"
+trafikito_cpu_processors_count="cat /proc/cpuinfo 2>&1 | grep processor | wc -l"
+trafikito_vmstat="vmstat"
+trafikito_df_p="df -P"
+trafikito_hostname="hostname"
+trafikito_curl="curl --version"
+trafikito_df_h="df -h"
+trafikito_lsof_count_network_connections="lsof -i | grep -- '->' | wc -l"
+trafikito_lsof_count_open_files="lsof | wc -l"
+trafikito_netstat_i="netstat -i"
+trafikito_vmstat_s="vmstat -s"
+trafikito_top="top -bcn1"
+STOP
+) | while read line; do
+    command=`echo $line | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
+    echo "  executing $command..."
+    echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
+    eval $command >>$TMP_FILE 2>&1
+done
 
 echo "* Get available commands file & set default options for server"
-curl -X POST $URL/v2/agent/get_agent_file?file=available_commands.sh \
-     -H 'Cache-Control: no-cache' \
-     -H 'Content-Type: application/x-www-form-urlencoded' \
-     -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW' \
-     -F output=undefined \
-     -F userApiKey=$USER_API_KEY \
-     -F workspaceId=$WORKSPACE_ID \
-     -F serverId=$SERVER_ID
+curl --request POST \
+     --url    "$URL/v2/agent/get_agent_file?file=available_commands.sh" \
+     --header "content-type: multipart/form-data" \
+     --form   "output=@$TMP_FILE" \
+     --form   "userApiKey=$USER_API_KEY" \
+     --form   "workspaceId=$WORKSPACE_ID" \
+     --form   "serverId=$SERVER_ID" \
+     --form   "os=$os" \
+     --form   "osCodename=$os_codename" \
+     --form   "osRelease=$os_release" \
+     --form   "centosFlavor=$centos_flavor" \
+     --output "$BASEDIR/available_commands.sh"
 
+echo STOP
+exit 1
 # now everything will be owned by $RUNAS
 chown -R $RUNAS $BASEDIR
 

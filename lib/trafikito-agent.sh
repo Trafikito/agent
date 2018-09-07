@@ -34,7 +34,7 @@ fi
 export BASEDIR=$1
 
 # SYNOPSIS: The real trafikito agent
-DEBUG=
+DEBUG=1
 
 
 # agent version: will be compared as a string
@@ -82,55 +82,53 @@ fn_debug() {
 }
 
 ##########################################################
-# function to get:
+# function to define:
+#   $CALL_TOKEN
 #   $COMMANDS_TO_RUN: commands to execute from Trafikito
 #   $AGENT_NEW_VERSION: current_agent_version for dynamic updates
 #   $CYCLE_DELAY: seconds to delay this cycle
-#   $CALL_TOKEN: version 1
+#   $TIME_INTERVAL: run interval
+#   $WIDGETS: , delimited list of widgets to install
+# returns:
+#   0 success
+#   1 error and log error
 ##########################################################
-fn_set_commands_to_run() {
-    echo curl -s -X POST -H "Authorization: $USER_API_KEY" \
-         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
-         "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30
-    exit 1
-    data=`curl -s -X POST -H "Authorization: $USER_API_KEY" \
-         --data "serverId=$SERVER_ID&agentVersion=$AGENT_VERSION&os=$os&osCodename=$os_codename&osRelease=$os_release&centosFlavor=$centos_flavor" \
-         "$URL_GET_CONFIG" --retry 3 --retry-delay 1 --max-time 30`
-    fn_debug "DATA = $data"
+fn_get_config() {
+    data=`curl --request POST --silent \
+               --url     "$URL/v2/agent/get_config" \
+               --header  "Content-Type: application/json" \
+               --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\" }"
+        `
+    # check for curl error
+    if [ $? -ne 0 ]; then
+        fn_log "curl returned curl error code $?: cannot complete run"
+        return 1
+    fi
+    # check for trafikito error
+    echo $data | grep -q error
+    if [ $? -eq 0 ]; then
+        # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED","env":"production"},"data":null}
+        error=`echo $data | sed -e 's/message":"//' -e 's/".*//'`
+        fn_log "curl returned Trafikito error '$error': cannot complete run"
+        return 1
+    fi
+
+    # parse data
     set $data
-    COMMANDS_TO_RUN=$1
-    CALL_TOKEN='N/A'
-    AGENT_NEW_VERSION=$2
-    CYCLE_DELAY=$3
+    CALL_TOKEN=$1
+    COMMANDS_TO_RUN=`echo $2 | sed -e 's/,/ /g'`
+    AGENT_NEW_VERSION=$3
+    CYCLE_DELAY=$4
+    TIME_INTERVAL=$5
+    WIDGETS=`echo $6 | sed -e 's/,/ /g'`
     
-    fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
     fn_debug "    CALL_TOKEN $CALL_TOKEN"
+    fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
     fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
     fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
+    fn_debug "    TIME_INTERVAL $TIME_INTERVAL"
+    fn_debug "    WIDGETS $WIDGETS"
 
-    # save CYCLE_DELAY for wrapper
-    #CYCLE_DELAY=2
-    echo $CYCLE_DELAY >$BASEDIR/var/cycle_delay
-
-    tmp=`echo $COMMANDS_TO_RUN | grep '{"data":null,"error":{"code":"#q2w4544h4asa2gAefg53GHrfd","message":'`
-    if [ -n "$tmp" ]; then
-        ERROR="Error: Do not call more then once per minute. ANOTHER_REQUEST_IN_PROGRESS"
-        return 1
-    fi
-
-    tmp=`echo "$COMMANDS_TO_RUN" | grep "\"error\":{\"code\":\"#"`
-    if [ -n "$tmp" ]; then
-        ERROR="Error: Can not get commands to run: $tmp"
-        return 1
-    fi
-        
-    if [ -z "$COMMANDS_TO_RUN" ];
-    then
-        ERROR="Error: received empty config from Trafikito.com. Probably a network outage?"
-        return 1
-    fi
-    
-    ERROR=""
     return 0
 }
 
@@ -139,7 +137,7 @@ fn_set_commands_to_run() {
 ##########################
 fn_execute_trafikito_cmd() {
     # can execute only commands with trafikito_ in it
-    cmd="$1"
+    cmd="trafikito_$1"
     if [ -z "$cmd" ]; then
         # can not execute empty string
         echo "No command specified for execute_trafikito_cmd. Command: $cmd"
@@ -165,45 +163,44 @@ fn_log "agent run started"
 
 fn_set_os
 
-# get from trafikito:
-#   commands to run from trafikito
-fn_set_commands_to_run
-
-if [ ! -z "$ERROR" ]; then
-    fn_log $ERROR
+# get config from trafikito
+fn_get_config
+if [ $? -ne 0 ]; then
     fn_log "Skipping this run"
-else
-    # create new tmp file
-    >$TMP_FILE
+    exit 1
+fi
 
-    # Run commands and send results to tmp file
-    for cmd in $COMMANDS_TO_RUN
-    do
-        fn_log "Running $cmd"
-        fn_execute_trafikito_cmd "$cmd"
-        fn_log "  $cmd is done"
-    done
+# save CYCLE_DELAY and TIME_INTERVAL for wrapper
+#CYCLE_DELAY=2
+echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay
+echo $TIME_INTERVAL >$BASEDIR/var/time_interval
 
-    # collect available commands from available_commands.sh
-    echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
-    cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
+# create new tmp file
+>$TMP_FILE
 
-    # test url version in use
-    fn_debug "use v$API_VERSION url to send data to Trafikito"
-    if [ $API_VERSION -eq 1 ]; then
-        curl -s -X POST -H "Authorization: $API_KEY" -H "Content-Type: multipart/form-data" -F "output=@$TMP_FILE" "$URL_OUTPUT?callToken=$CALL_TOKEN" \
-             --retry 3 --retry-delay 1 --max-time 30 > /dev/null 2>&1
-    else
-        curl -s -X POST -H "Authorization: $API_KEY" --data "serverId=$SERVER_ID" \
-             -H "Content-Type: multipart/form-data" \
-             -F "output=@$TMP_FILE" "$URL_OUTPUT" --retry 3 --retry-delay 1 --max-time 30
-    fi
-    fn_debug "DONE!"
+# Run commands and send results to tmp file
+for cmd in $COMMANDS_TO_RUN
+do
+    fn_log "Running $cmd"
+    fn_execute_trafikito_cmd "$cmd"
+    fn_log "  $cmd is done"
+done
 
-    # test if need to upgrade/downgrade agent
-    if [ $AGENT_VERSION != $AGENT_NEW_VERSION ]; then
-        fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
-        # TODO
-        fn_log "  TODO: download lib/*!"
-    fi
+# collect available commands from available_commands.sh
+echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
+cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
+
+curl --request POST \
+     --url     "$URL/v2/agent/save_output" \
+     --form    output=@$TMP_FILE \
+     --form    serverId=$SERVER_ID \
+     --form    serverApiKey=$API_KEY
+
+fn_debug "DONE!"
+
+# test if need to upgrade/downgrade agent
+if [ $AGENT_VERSION != $AGENT_NEW_VERSION ]; then
+    fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
+    # TODO
+    fn_log "  TODO: download lib/*!"
 fi
