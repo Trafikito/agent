@@ -245,18 +245,19 @@ fn_install_tool "vmstat" "report virtual memory statistics"
 echo "* Installing agent..."
 fn_download ()
 {
-    # LUKAS TODO
-    #echo $URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'
-    echo http://tui.home/trafikito/$1
+    if [ `hostname` = 'tui' ]; then
+        echo "http://tui.home/trafikito/$1"
+    else
+        echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+    fi
 }
-curl -X POST --retry 3 --retry-delay 1 --max-time 30 \
-     -o "${BASEDIR}/trafikito"                `fn_download trafikito` \
-     -o "${BASEDIR}/uninstall.sh"             `fn_download uninstall.sh` \
-     -o "${BASEDIR}/lib/trafikito-wrapper.sh" `fn_download lib/trafikito-wrapper.sh` \
-     -o "${BASEDIR}/lib/trafikito-agent.sh"   `fn_download lib/trafikito-agent.sh` \
-     -o "${BASEDIR}/lib/set_os.sh"            `fn_download lib/set_os.sh`
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 \
+     --output "${BASEDIR}/trafikito"                `fn_download trafikito` \
+     --output "${BASEDIR}/uninstall.sh"             `fn_download uninstall.sh` \
+     --output "${BASEDIR}/lib/trafikito-wrapper.sh" `fn_download lib/trafikito-wrapper.sh` \
+     --output "${BASEDIR}/lib/trafikito-agent.sh"   `fn_download lib/trafikito-agent.sh` \
+     --output "${BASEDIR}/lib/set_os.sh"            `fn_download lib/set_os.sh`
 echo
-
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 
 # get os facts

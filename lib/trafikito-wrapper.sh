@@ -29,11 +29,11 @@
 # SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent.sh to allow for dynamic updates
 
 # basedir is $1 to enable this to run from anywhere
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <trafikito base dir>" 1>&2
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <server_id> <trafikito-home>" 1>&2
     exit 1
 fi
-export BASEDIR=$1
+export BASEDIR=$2
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
