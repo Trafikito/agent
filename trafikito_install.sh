@@ -241,8 +241,8 @@ fn_install_tool "top"    "display processes"
 fn_install_tool "uptime" "tell how long the system has been running"
 fn_install_tool "vmstat" "report virtual memory statistics"
 
-
 echo "* Installing agent..."
+
 fn_download ()
 {
     if [ `hostname` = 'tui' ]; then
@@ -251,11 +251,12 @@ fn_download ()
         echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
     fi
 }
+
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --output "${BASEDIR}/trafikito"                `fn_download trafikito` \
      --output "${BASEDIR}/uninstall.sh"             `fn_download uninstall.sh` \
-     --output "${BASEDIR}/lib/trafikito-wrapper.sh" `fn_download lib/trafikito-wrapper.sh` \
-     --output "${BASEDIR}/lib/trafikito-agent.sh"   `fn_download lib/trafikito-agent.sh` \
+     --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` \
+     --output "${BASEDIR}/lib/trafikito_agent.sh"   `fn_download lib/trafikito_agent.sh` \
      --output "${BASEDIR}/lib/set_os.sh"            `fn_download lib/set_os.sh`
 echo
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
@@ -355,7 +356,7 @@ if [ $? -eq 0 ]; then
         echo "After=network.target"
         echo "[Service]"
         echo "Type=simple"
-        echo "ExecStart=$BASEDIR/lib/trafikito-wrapper.sh $BASEDIR"
+        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $BASEDIR"
         echo "User=nobody"
         echo "Group=nogroup"
         echo "[Install]"

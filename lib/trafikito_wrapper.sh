@@ -26,7 +26,7 @@
 #  * SUCH DAMAGE.
 #  */
 
-# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito-agent.sh to allow for dynamic updates
+# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito_agent.sh to allow for dynamic updates
 
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 2 ]; then
@@ -45,7 +45,7 @@ while true; do
         sec=`date +%S`
     done
 
-    sh $BASEDIR/lib/trafikito-agent.sh $BASEDIR
+    sh $BASEDIR/lib/trafikito_agent.sh $BASEDIR
     CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay`
     sleep 1 # in case run takes less than 1 sec
    

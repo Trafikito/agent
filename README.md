@@ -45,10 +45,10 @@ The static configuration file for Trafikito.
 ### /opt/trafikito/etc/trafikito.app
 The dynamic configuration file for Trafikito.
 
-### /opt/trafikito/lib/trafikito-wrapper.sh
-A wrapper to run the real agent /opt/trafikito/lib/trafikito-agent.sh
+### /opt/trafikito/lib/trafikito_wrapper.sh
+A wrapper to run the real agent /opt/trafikito/lib/trafikito_agent.sh
 
-### /opt/trafikito/lib/trafikito-agent.sh
+### /opt/trafikito/lib/trafikito_agent.sh
 The real Trafikito agent.
 
 ### /opt/trafikito/var/trafikito.log
@@ -62,8 +62,8 @@ tmp/trafikito/
 ├── etc
 │   └── trafikito.cfg
 ├── lib
-│   └── trafikito-agent.sh
-│   └── trafikito-wrapper.sh
+│   └── trafikito_agent.sh
+│   └── trafikito_wrapper.sh
 ├── trafikito
 └── var
     trafikito.log

@@ -6,7 +6,7 @@ export BASEDIR="${0%/*}"
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
 
-export AGENTNAME="trafikito-wrapper.sh"
+export AGENTNAME="trafikito_wrapper.sh"
 
 usage() {
     echo "Usage: $0 {start|stop|restart|status}"
@@ -86,7 +86,7 @@ echo "================================="
 exit 1
 
 export PIDFILE=$BASEDIR/var/trafikito.pid
-export AGENTNAME=trafikito-wrapper.sh
+export AGENTNAME=trafikito_wrapper.sh
 
 usage() {
     echo "Usage: $0 {start|stop|restart|status}"
@@ -154,8 +154,8 @@ stop() {
         status
         exit 1
     fi
-    # kill everything matching lib/trafikito-
-    PIDS=`pgrep -f 'lib/trafikito-'`
+    # kill everything matching lib/trafikito_
+    PIDS=`pgrep -f 'lib/trafikito_'`
     kill -9 $PIDs
     rm -f $PIDFILE
     status
