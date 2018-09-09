@@ -26,26 +26,33 @@
 #  * SUCH DAMAGE.
 #  */
 
-. "${DIR}/functions/get_config_value.sh"
+# SYNOPSIS: The trafikito agent wrapper - sources lib/trafikito_agent.sh to allow for dynamic updates
 
-fn_set_environment() {
-    agent_version="14"
-    config_file="${DIR}/trafikito.conf"
-    lock_file="${DIR}/lock.file"
-    api_key=$(fn_get_config_value api_key)
-    server_id=$(fn_get_config_value server_id)
-    tmp_file=$(fn_get_config_value tmp_file)
-    random_number=$(fn_get_config_value random_number)
-    url_output=$(fn_get_config_value url_output)
-    url_get_config=$(fn_get_config_value url_get_config)
-    
-    if [ ! -w "$tmp_file" ]; then
-        touch "$tmp_file" > /dev/null 2>&1
-        chmod 777 "$tmp_file" > /dev/null 2>&1
+# basedir is $1 to enable this to run from anywhere
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <server_id> <trafikito-home>" 1>&2
+    exit 1
+fi
+export BASEDIR=$2
+
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+START_ON=`date +%S | sed s/^0//`
+while true; do
+    sec=`date +%S`
+    while [ $sec -ne $START_ON ]; do
+        sleep 1
+        sec=`date +%S`
+    done
+
+    sh $BASEDIR/lib/trafikito_agent.sh $BASEDIR
+    CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay`
+    sleep 1 # in case run takes less than 1 sec
+   
+    if [ $CYCLE_DELAY -gt 0 ]; then
+        echo -n "START_ON $START_ON -> "
+        START_ON=$((START_ON + CYCLE_DELAY))
+        START_ON=$((START_ON % 60))
+        echo $START_ON
     fi
-    
-    if [ ! -r "$tmp_file" ]; then
-        touch "$tmp_file" > /dev/null 2>&1
-        chmod 777 "$tmp_file" > /dev/null 2>&1
-    fi    
-}
+done

@@ -1,5 +1,3 @@
-#!/usr/bin/env sh
-
 # /*
 #  * Copyright (C) Trafikito.com
 #  * All rights reserved.
@@ -26,22 +24,27 @@
 #  * SUCH DAMAGE.
 #  */
 
-fn_send_output_to_trafikito() {
-    if command -V curl > /dev/null 2>&1; then
-        
-        # curl is available - call with curl
-        # -s = silent
-        # -X = custom HTTP method
-        # -H = custom Header
-        # -F = add form data. Use @ to add binary format of the content
-        # -retry = it will retry this number of times before giving up
-        # ---retry-delay = sleep this amount of time before each retry when a transfer has failed
-        # --max-time = maximum time in seconds that you allow the whole operation to take
-        
-        curl -s -X POST -H "Authorization: $api_key" -H "Content-Type: multipart/form-data" -F "output=@$tmp_file" "$url_output?callToken=$call_token" --retry 3 --retry-delay 1 --max-time 30 > /dev/null 2>&1
-    else
-        echo "curl not found. Please install curl and try again."
-        exit 1
-    fi
-}
+echo ""
+echo ""
+echo "  _____           __ _ _    _ _"
+echo " |_   _| __ __ _ / _(_) | _(_) |_ ___"
+echo "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
+echo "   | || | | (_| |  _| |   <| | || (_) |"
+echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
+echo ""
+echo ""
+echo "    Uninstalling Trafikito.com agent"
+echo ""
+echo ""
 
+BASEDIR="${0%/*}"
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+# remove systemd config
+if [ -f /etc/systemd/system/trafikito ]; then
+    systemctl disable trafikito
+    rm /etc/systemd/system/trafikito
+fi
+
+# now remove everything in BASEDIR
+echo rm -r $BASEDIR
