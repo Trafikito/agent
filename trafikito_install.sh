@@ -54,7 +54,7 @@ fn_prompt() {
         if [ -z "$x" ]; then
             answer=$default
         else
-            case "$x" in 
+            case "$x" in
                 y*|Y*) answer=Y ;;
                 n*|N*) answer=N ;;
                 *) $ECHO "Please reply y or n"
@@ -117,7 +117,7 @@ if [ "$WHOAMI" != "root" ]; then
     echo "If possible, run installation as root user."
     echo "Root user is used to make script running as 'nobody' which improves security."
     echo "To install as root either log in as root and execute the script or use:"
-    echo 
+    echo
     echo "  sudo sh $0"
     echo
     fn_prompt "N" "Continue as $WHOAMI [yN]: " || exit 1
@@ -252,12 +252,18 @@ fn_download ()
     fi
 }
 
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 \
-     --output "${BASEDIR}/trafikito"                `fn_download trafikito` \
-     --output "${BASEDIR}/uninstall.sh"             `fn_download uninstall.sh` \
-     --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` \
-     --output "${BASEDIR}/lib/trafikito_agent.sh"   `fn_download lib/trafikito_agent.sh` \
-     --output "${BASEDIR}/lib/set_os.sh"            `fn_download lib/set_os.sh`
+echo "*** Starting to download agent files"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
+echo "*** 1/5 done"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
+echo "*** 2/5 done"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+echo "*** 3/5 done"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
+echo "*** 4/5 done"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
+echo "*** 5/5 done"
+
 echo
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 
@@ -266,7 +272,7 @@ chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 fn_set_os
 
 echo "* Create server and get config file"
-curl -X POST $URL/v2/agent/get_agent_file?file=trafikito.conf \
+curl -X POST --silent $URL/v2/agent/get_agent_file?file=trafikito.conf \
     -H 'Cache-Control: no-cache' \
     -H 'Content-Type: application/json' \
     -d "{ \
@@ -317,7 +323,7 @@ STOP
 done
 
 echo "* Get available commands file & set default options for server"
-curl --request POST \
+curl --request POST --silent \
      --url    "$URL/v2/agent/get_agent_file?file=available_commands.sh" \
      --header "content-type: multipart/form-data" \
      --form   "output=@$TMP_FILE" \
@@ -330,8 +336,6 @@ curl --request POST \
      --form   "centosFlavor=$centos_flavor" \
      --output "$BASEDIR/available_commands.sh"
 
-echo STOP
-exit 1
 # now everything will be owned by $RUNAS
 chown -R $RUNAS $BASEDIR
 
@@ -368,4 +372,3 @@ if [ $? -eq 0 ]; then
         exit 0
     fi
 fi
-
