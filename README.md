@@ -1,4 +1,4 @@
-# Trafikito.com agent for Linux machines
+# Trafikito agent for Linux machines
 POSIX agent which is running on client's machine. 
 
 Once per minute agent get commands to execute from Trafikito API by server configuration, 
