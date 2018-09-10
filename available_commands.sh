@@ -26,7 +26,7 @@
 #  * SUCH DAMAGE.
 #  */
 
-# This file must list all commands you want to use in data source options at Trafikito.com
+# This file must list all commands you want to use in data source options at Trafikito
 #
 # - Each command MUST START with: trafikito_
 # - NO spaces around =
