@@ -33,7 +33,7 @@ echo "   | || | | (_| |  _| |   <| | || (_) |"
 echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
 echo ""
 echo ""
-echo "    Uninstalling Trafikito.com agent"
+echo "    Uninstalling Trafikito agent"
 echo ""
 echo ""
 
