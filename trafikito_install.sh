@@ -33,7 +33,7 @@ echo "   | || | | (_| |  _| |   <| | || (_) |"
 echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
 echo ""
 echo ""
-echo "    Trafikito.com agent installation"
+echo "    Trafikito agent installation"
 echo ""
 echo ""
 
