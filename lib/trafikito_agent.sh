@@ -48,7 +48,7 @@ export URL_GET_CONFIG="$URL/v2/agent/get"
 export URL_DOWNLOAD="$URL/v2/agent/get_agent_file?file="
 
 # for pgp testing TODO
-export URL_DOWNLOAD=http://tui.home/trafikito/
+#export URL_DOWNLOAD=http://tui.home/trafikito/
 
 # trim logfile to 100 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
@@ -62,7 +62,7 @@ fi
 
 # source available commands
 # TODO make this more robust!
-. "$BASEDIR/available_commands.sh" || exit 1
+. $BASEDIR/available_commands.sh || exit 1
 
 # source function to set os facts || exit 1
 . $BASEDIR/lib/set_os.sh

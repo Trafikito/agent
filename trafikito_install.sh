@@ -360,7 +360,7 @@ if [ $? -eq 0 ]; then
         echo "After=network.target"
         echo "[Service]"
         echo "Type=simple"
-        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $BASEDIR"
+        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
         echo "User=nobody"
         echo "Group=nogroup"
         echo "[Install]"
