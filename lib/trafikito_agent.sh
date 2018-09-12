@@ -192,7 +192,7 @@ done
 echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
 cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
-TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp` || 0
 
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     "$URL/v2/agent/save_output" \
