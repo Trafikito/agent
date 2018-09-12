@@ -26,6 +26,8 @@
 #  * SUCH DAMAGE.
 #  */
 
+START=$(date +%s)
+
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <trafikito base dir>" 1>&2
@@ -190,14 +192,20 @@ done
 echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
 cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
+TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     "$URL/v2/agent/save_output" \
      --form    output=@$TMP_FILE \
+     --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
      --form    serverId=$SERVER_ID \
      --form    serverApiKey=$API_KEY
      `
 fn_log "Save result: $saveResult"
 fn_debug "DONE!"
+
+END=$(date +%s)
+echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp
 
 # test if need to upgrade/downgrade agent
 if [ $AGENT_VERSION != $AGENT_NEW_VERSION ]; then
