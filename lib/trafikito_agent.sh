@@ -193,7 +193,6 @@ cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     "$URL/v2/agent/save_output" \
      --form    output=@$TMP_FILE \
-     --form    start=$START \
      --form    serverId=$SERVER_ID \
      --form    serverApiKey=$API_KEY
      `
