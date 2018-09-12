@@ -1,5 +1,3 @@
-#!/bin/sh
-
 # /*
 #  * Copyright (C) Trafikito.com
 #  * All rights reserved.
@@ -44,4 +42,3 @@
 #
 # For enhanced security. If you would lose your login credentials you will still be safe.
 # Because to execute malware command you will still have to connect to your server and update this file.
-
