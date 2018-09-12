@@ -94,7 +94,7 @@ fn_debug() {
 #   1 error and log error
 ##########################################################
 fn_get_config() {
-    data=`curl --request POST --silent \
+    data=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
                --url     "$URL/v2/agent/get_config" \
                --header  "Content-Type: application/json" \
                --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\" }"
@@ -190,7 +190,7 @@ done
 echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
 cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
-curl --request POST \
+curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     "$URL/v2/agent/save_output" \
      --form    output=@$TMP_FILE \
      --form    serverId=$SERVER_ID \

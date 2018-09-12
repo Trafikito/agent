@@ -208,11 +208,11 @@ fn_install_tool() {
         /sbin/apk --no-cache add $pkg
     else
         echo "  ERROR: this system's package manager is not supported"
-        echo "    Please contact trafikito support for help"  # TODO
+        echo "    Please contact Trafikito support for help"  # TODO
         return 1
     fi
     if [ $? ]; then
-        echo "  Something went wrong: please contact trafikito support for help"  # TODO
+        echo "  Something went wrong: please contact Trafikito support for help"  # TODO
         return 1
     else
         echo "  installed `which $tool`"
@@ -229,7 +229,6 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "* Looking for required commands..."
-fn_install_tool "tree"   "test command not used in trafikito"
 fn_install_tool "df"     "report file system disk space usage"
 fn_install_tool "free"   "report amount of free and used memory in the system"
 fn_install_tool "egrep"  "print lines matching a pattern"
@@ -241,6 +240,7 @@ fn_install_tool "top"    "display processes"
 fn_install_tool "uptime" "tell how long the system has been running"
 fn_install_tool "vmstat" "report virtual memory statistics"
 
+echo ""
 echo "* Installing agent..."
 
 fn_download ()
@@ -272,7 +272,7 @@ chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 fn_set_os
 
 echo "* Create server and get config file"
-curl -X POST --silent $URL/v2/agent/get_agent_file?file=trafikito.conf \
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_agent_file?file=trafikito.conf \
     -H 'Cache-Control: no-cache' \
     -H 'Content-Type: application/json' \
     -d "{ \
@@ -322,8 +322,8 @@ STOP
     eval $command >>$TMP_FILE 2>&1
 done
 
-echo "* Get available commands file & set default options for server"
-curl --request POST --silent \
+echo "* Getting available commands file & setting default dashboard"
+curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url    "$URL/v2/agent/get_agent_file?file=available_commands.sh" \
      --header "content-type: multipart/form-data" \
      --form   "output=@$TMP_FILE" \
@@ -356,7 +356,7 @@ if [ $? -eq 0 ]; then
     if [ $? -eq 1 ]; then
         (
         echo "[Unit]"
-        echo "Description=Trafikito Service"
+        echo "Description=Trafikito Agent"
         echo "After=network.target"
         echo "[Service]"
         echo "Type=simple"
