@@ -50,11 +50,11 @@ export URL_DOWNLOAD="$URL/v2/agent/get_agent_file?file="
 # for pgp testing TODO
 #export URL_DOWNLOAD=http://tui.home/trafikito/
 
-# trim logfile to 100 lines
+# trim logfile to 1000 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
 if [ -f $LOGFILE ]; then
     cp $LOGFILE $LOGFILE.bak
-    tail -n 100 $LOGFILE.bak >$LOGFILE
+    tail -n 1000 $LOGFILE.bak >$LOGFILE
 fi
 
 # source config
