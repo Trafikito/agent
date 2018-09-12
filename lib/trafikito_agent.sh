@@ -190,12 +190,14 @@ done
 echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
 cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
-curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
+saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     "$URL/v2/agent/save_output" \
      --form    output=@$TMP_FILE \
+     --form    start=$START \
      --form    serverId=$SERVER_ID \
      --form    serverApiKey=$API_KEY
-
+     `
+fn_log "Save result: $saveResult"
 fn_debug "DONE!"
 
 # test if need to upgrade/downgrade agent
