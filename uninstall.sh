@@ -41,10 +41,11 @@ BASEDIR="${0%/*}"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 # remove systemd config
-if [ -f /etc/systemd/system/trafikito ]; then
+if [ -f /etc/systemd/system/trafikito.service ]; then
     systemctl disable trafikito
-    rm /etc/systemd/system/trafikito
+    rm /etc/systemd/system/trafikito.service
 fi
 
 # now remove everything in BASEDIR
-echo rm -r $BASEDIR
+# TODO add confirmation which user has to type in
+echo rm -r "$BASEDIR"

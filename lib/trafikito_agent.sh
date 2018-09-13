@@ -26,6 +26,8 @@
 #  * SUCH DAMAGE.
 #  */
 
+START=$(date +%s)
+
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <trafikito_base_dir>" 1>&2
@@ -44,18 +46,18 @@ export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_command
 # Trafikito API URLs: these may change with different api versions: do not store in config
 URL="https://ap-southeast-1.api.trafikito.com"
 
-# trim logfile to 100 lines
+# trim logfile to 1000 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
 if [ -f $LOGFILE ]; then
     cp $LOGFILE $LOGFILE.bak
-    tail -n 100 $LOGFILE.bak >$LOGFILE
+    tail -n 1000 $LOGFILE.bak >$LOGFILE
 fi
 
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
 # source available commands
-# TODO make this more robust!
+# TODO sanitize the file and check if format is correct if not - send to Trafikito API error which will be delivered to client
 . $BASEDIR/available_commands.sh || exit 1
 
 # source function to set os facts || exit 1
@@ -66,7 +68,7 @@ fi
 ###################################################
 
 fn_log() {
-    echo "`date +'%x %X'` $*" >>$LOGFILE
+    echo "`date +'%x %X'` $*" >>"$LOGFILE"
 }
 
 fn_debug() {
@@ -99,10 +101,10 @@ fn_get_config() {
         return 1
     fi
     # check for trafikito error
-    echo $data | grep -q error
+    echo "$data" | grep -q error
     if [ $? -eq 0 ]; then
         # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED","env":"production"},"data":null}
-        error=`echo $data | sed -e 's/message":"//' -e 's/".*//'`
+        error=`echo "$data" | sed -e 's/message":"//' -e 's/".*//'`
         fn_log "curl returned Trafikito error '$error': cannot complete run"
         return 1
     fi
@@ -115,7 +117,7 @@ fn_get_config() {
     CYCLE_DELAY=$4
     TIME_INTERVAL=$5
     WIDGETS=`echo $6 | sed -e 's/,/ /g'`
-    
+
     fn_debug "    CALL_TOKEN $CALL_TOKEN"
     fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
     fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
@@ -137,10 +139,10 @@ fn_execute_trafikito_cmd() {
         echo "No command specified for execute_trafikito_cmd. Command: $cmd"
     elif [ $(echo "$cmd" | grep "trafikito_" | sed "s/[^a-zA-Z_]*//g") = "$cmd" ]; then
         # can execute, let's do it. Echo commands delimiter:
-        echo "*-*-*-*------------ Trafikito command: $cmd" >> "$TMP_FILE"
+        echo "*-*-*-*------------ Trafikito command: $cmd" >>$TMP_FILE
         # $cmd is validated. has trafikito_ prefix and is single word with a-Z and _ characters.
         cmd="$(eval echo "\$$cmd")"
-        
+
         # $cmd command is set by user at available_commands.sh
         eval "$cmd >> $TMP_FILE 2>&1"
     else
@@ -177,6 +179,28 @@ fn_upgrade()
     chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 }
 
+##########################
+# install a widget
+##########################
+fn_install_trafikito_widget() {
+    # can execute only commands with trafikito_ in it
+    WIDGET_ID=$1
+    data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
+               --url     "$URL/v2/widget/get-command" \
+               --header  "Content-Type: application/json" \
+               --data "{ \"widgetId\": \"$WIDGET_ID\" }"
+    `
+
+    echo $data >>$BASEDIR/available_commands.sh
+    data=`echo $data | awk -F "=" '{print $1}'`
+
+    data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
+               --url     "$URL/v2/widget/install" \
+               --header  "Content-Type: application/json" \
+               --data "{ \"serverApiKey\": \"$API_KEY\", \"serverId\": \"$SERVER_ID\", \"widgetId\": \"$WIDGET_ID\", \"cmd\": \"$data\" }"
+    `
+}
+
 ##################################################
 # start of main
 ##################################################
@@ -208,22 +232,39 @@ do
     fn_log "  $cmd is done"
 done
 
-# collect available commands from available_commands.sh
-echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
-cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
+# Install widgets
+for widget in $WIDGETS
+do
+    fn_log "Installing $widget"
+    fn_install_trafikito_widget "$widget"
+    fn_log "  $widget installation is done"
+done
 
-# TODO curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
-curl --request POST \
-     --url     "$URL/v2/agent/save_output" \
+# collect available commands from available_commands.sh
+echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
+cat $BASEDIR/available_commands.sh | grep -v "#" >>$TMP_FILE
+
+TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+
+saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
+     --url     $URL/v2/agent/save_output \
      --form    output=@$TMP_FILE \
+     --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
      --form    serverId=$SERVER_ID \
-     --form    serverApiKey=$API_KEY
+     --form    serverApiKey=$API_KEY`
+
 if [ $? -ne 0 ]; then
     fn_log "**ERROR: data sending failed: curl error code $?"
 fi
+     `
+fn_log "Save result: $saveResult"
+fn_debug "DONE!"
+
+END=$(date +%s)
+echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp
 
 # test if need to upgrade/downgrade agent
-if [ $AGENT_VERSION != $AGENT_NEW_VERSION ]; then
+if [ "$AGENT_VERSION" != "$AGENT_NEW_VERSION" ]; then
     fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
     fn_upgrade
 fi

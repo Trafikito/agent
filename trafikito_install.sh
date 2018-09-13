@@ -41,6 +41,13 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 export URL="https://ap-southeast-1.api.trafikito.com"
 
+# remove previous installation
+# TODO fix this for not root user
+if [ -f /etc/systemd/system/trafikito.service ]; then
+    systemctl disable trafikito 2>/dev/null
+    rm /etc/systemd/system/trafikito.service 2>/dev/null
+fi
+
 ECHO=/bin/echo
 fn_prompt() {
     default=$1
@@ -52,7 +59,7 @@ fn_prompt() {
     while true; do
         $ECHO -n "$mesg "; read x
         if [ -z "$x" ]; then
-            answer=$default
+            answer="$default"
         else
             case "$x" in
                 y*|Y*) answer=Y ;;
@@ -61,7 +68,7 @@ fn_prompt() {
                 continue
             esac
         fi
-        if [ $answer = $default ]; then
+        if [ "$answer" = "$default" ]; then
             return 1
         else
             return 0
@@ -89,12 +96,12 @@ usage() {
 
 # parse arguments
 for x in $*; do
-    option=`echo $x | sed -e 's#=.*##'`
-    arg=`echo $x | sed -e 's#.*=##'`
+    option=`echo "$x" | sed -e 's#=.*##'`
+    arg=`echo "$x" | sed -e 's#.*=##'`
     case "$option" in
-        --user_api_key) USER_API_KEY=$arg ;;
-        --workspace_id) WORKSPACE_ID=$arg ;;
-        --servername)   SERVER_NAME=$arg ;;
+        --user_api_key) USER_API_KEY="$arg" ;;
+        --workspace_id) WORKSPACE_ID="$arg" ;;
+        --servername)   SERVER_NAME="$arg" ;;
         *) echo "Bad option '$option'" 1>&2
            usage
     esac
@@ -104,9 +111,9 @@ test -z "$USER_API_KEY" && echo "Option '--user_api_key' with an argument is req
 test -z "$WORKSPACE_ID" && echo "Option '--workspace_id' with an argument is required" 1>&2 && usage
 if [ -z "$SERVER_NAME" ]; then
     SERVER_NAME=`hostname -f`
-    $ECHO -n "Name for this Trafikito instance [$SERVER_NAME]: "; read x
-    if [ $x ]; then
-        SERVER_NAME=$x
+    "$ECHO" -n "Name this Trafikito instance [${SERVER_NAME}]: "; read x
+    if [ "$x" ]; then
+        SERVER_NAME="$x"
     fi
 fi
 
@@ -121,7 +128,7 @@ if [ "$WHOAMI" != "root" ]; then
     echo "  sudo sh $0"
     echo
     fn_prompt "N" "Continue as $WHOAMI [yN]: " || exit 1
-    RUNAS=$WHOAMI
+    RUNAS="$WHOAMI"
 fi
 
 # get BASEDIR
@@ -160,12 +167,15 @@ if [ $? -ne 0 ]; then
 fi
 
 # create std subdirs
-mkdir $BASEDIR/etc
-mkdir $BASEDIR/lib
-mkdir $BASEDIR/var
+mkdir -p $BASEDIR/etc
+mkdir -p $BASEDIR/lib
+mkdir -p $BASEDIR/var
+
+echo "0" >$BASEDIR/var/cycle_delay
+echo "0" >$BASEDIR/var/time_took_last_time.tmp
 
 # build config and source it
-CONFIG="$BASEDIR/etc/trafikito.cfg"
+CONFIG=$BASEDIR/etc/trafikito.cfg
 (
 echo export RUNAS=\"$RUNAS\"
 echo export USER_API_KEY=\"$USER_API_KEY\"
@@ -173,6 +183,7 @@ echo export WORKSPACE_ID=\"$WORKSPACE_ID\"
 echo export SERVER_NAME=\"$SERVER_NAME\"
 echo export TMP_FILE=\"$BASEDIR/var/trafikito.tmp\"
 ) >$CONFIG
+
 . $CONFIG
 
 # function to install a tool
@@ -191,7 +202,7 @@ fn_install_tool() {
         return 0
     fi
 
-    if [ $WHOAMI != 'root' ]; then
+    if [ "$WHOAMI" != 'root' ]; then
         echo -n "  Need root privilege to install '$pkg': please install it manually [enter]: "; read x
         return
     fi
@@ -201,11 +212,11 @@ fn_install_tool() {
         return 1
     fi
     if [ -x /usr/bin/apt-get ]; then # Debian
-        /usr/bin/apt-get -y install $pkg
+        /usr/bin/apt-get -y install "$pkg"
     elif [ -x /usr/bin/yum ]; then # RedHat
-        /usr/bin/yum -y install $pkg
+        /usr/bin/yum -y install "$pkg"
     elif [ -x /sbin/apk ]; then # alpine
-        /sbin/apk --no-cache add $pkg
+        /sbin/apk --no-cache add "$pkg"
     else
         echo "  ERROR: this system's package manager is not supported"
         echo "    Please contact Trafikito support for help"  # TODO
@@ -245,6 +256,7 @@ echo "* Installing agent..."
 
 fn_download ()
 {
+    # for development
     if [ `hostname` = 'tui' ]; then
         echo "http://tui.home/trafikito/$1"
     else
@@ -253,16 +265,70 @@ fn_download ()
 }
 
 echo "*** Starting to download agent files"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
-echo "*** 1/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
-echo "*** 2/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
-echo "*** 3/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
-echo "*** 4/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
-echo "*** 5/5 done"
+file=$BASEDIR/trafikito
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+if [ ! -f "$file" ]; then
+    echo "*** 1/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download trafikito` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 1/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 1/5 done"
+fi
+
+file=$BASEDIR/uninstall.sh
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    echo "*** 2/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download uninstall.sh` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 2/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 2/5 done"
+fi
+
+file=$BASEDIR/lib/trafikito_wrapper.sh
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    echo "*** 3/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 3/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 3/5 done"
+fi
+
+file=$BASEDIR/lib/trafikito_agent.sh
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    echo "*** 4/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 4/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 4/5 done"
+fi
+
+file=$BASEDIR/lib/set_os.sh
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/set_os.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    echo "*** 5/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/set_os.sh` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 5/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 5/5 done"
+fi
 
 echo
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
@@ -292,8 +358,8 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
 
 export SERVER_ID=`grep server_id $TMP_FILE | sed -e 's/.*= //'`
 export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
-echo export SERVER_ID=\"$SERVER_ID\" >>$CONFIG
-echo export API_KEY=\"$API_KEY\"     >>$CONFIG
+echo export SERVER_ID=$SERVER_ID >>$CONFIG
+echo export API_KEY=$API_KEY     >>$CONFIG
 
 echo "* Generating initial settings"
 >$TMP_FILE
@@ -316,10 +382,10 @@ trafikito_vmstat_s="vmstat -s"
 trafikito_top="top -bcn1"
 STOP
 ) | while read line; do
-    command=`echo $line | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
+    command=`echo "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
     echo "  executing $command..."
     echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
-    eval $command >>$TMP_FILE 2>&1
+    eval "$command" >>$TMP_FILE 2>&1
 done
 
 echo "* Getting available commands file & setting default dashboard"
@@ -337,7 +403,7 @@ curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --output "$BASEDIR/available_commands.sh"
 
 # now everything will be owned by $RUNAS
-chown -R $RUNAS $BASEDIR
+chown -R "$RUNAS" $BASEDIR
 
 # configure restart
 if [ "$WHOAMI" != "root" ]; then

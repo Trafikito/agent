@@ -34,9 +34,9 @@ start() {
         echo "Trafikito agent already running" 1>&2
         return
     fi
-    if [ $RUNAS = 'nobody' ]; then
-        echo "su -s /bin/sh -c "$BASEDIR/lib/$AGENTNAME $1 $BASEDIR" nobody "
-        su -s /bin/sh -c "$BASEDIR/lib/$AGENTNAME $1 $BASEDIR" nobody &
+    if [ "$RUNAS" = 'nobody' ]; then
+        echo "su -s /bin/sh -c $BASEDIR/lib/$AGENTNAME $1 $BASEDIR nobody "
+        su -s /bin/sh -c $BASEDIR/lib/$AGENTNAME $1 $BASEDIR nobody &
     else
         $BASEDIR/lib/$AGENTNAME $1 $BASEDIR &
     fi
@@ -52,7 +52,7 @@ stop() {
         echo "Trafikito agent not running" 1>&2
         return
     fi
-    kill -9 $PID
+    kill -9 "$PID"
     status $1
 }
 
@@ -66,7 +66,7 @@ status() {
 }
 
 # need root
-if [ $RUNAS = "nobody" ] && [ `whoami` != "root" ]; then
+if [ "$RUNAS" = "nobody" ] && [ `whoami` != "root" ]; then
     echo "You must be root to control the Trafikito agent running as the user '$RUNAS'"
     exit 1
 fi
@@ -75,118 +75,10 @@ if [ $# -ne 1 ]; then
     usage
 fi
 
-case $1 in
+case "$1" in
     start)   start  $SERVER_ID   ;;
     stop)    stop   $SERVER_ID    ;;
     restart) stop   $SERVER_ID; start $SERVER_ID ;;
     status)  status $SERVER_ID  ;;
-    *) usage
-esac
-echo "================================="
-exit 1
-
-export PIDFILE=$BASEDIR/var/trafikito.pid
-export AGENTNAME=trafikito_wrapper.sh
-
-usage() {
-    echo "Usage: $0 {start|stop|restart|status}"
-}
-
-needroot() {
-    if [ $RUNAS = "nobody" ] && [ `whoami` != "root" ]; then
-        echo "You must be root to control the Trafikito agent running as the user '$RUNAS'"
-        exit 1
-    fi
-}
-
-# returns:
-#  $STATUS
-#    0 = not running
-#    1 = running normally
-#    2 = pid file but agent not running
-#    3 = agent running but no pid file
-#  $PID = pid of agent or list of pids (STATUS 3)
-#  $ERROR = true if set by start/stop
-getstatus() {
-    # check if pidfile exists
-    if [ -f $PIDFILE ]; then
-        PID=`cat $PIDFILE`
-        # agent running ?
-        ps -a -o pid | grep $PID >/dev/null
-        if [ $? -eq 0 ]; then        
-            STATUS=1         
-        else                 
-            STATUS=2         
-        fi             
-    else
-        # check if agent is running uncontrolled
-        PID=`pgrep -f $AGENTNAME`
-        if [ "$PID" ]; then
-            STATUS=3
-        else
-            STATUS=0
-        fi
-    fi
-}
-
-start() {
-    getstatus
-    if [ $STATUS -ne 0 ]; then
-        ERROR=1
-        status
-        exit 1
-    fi
-    if [ `whoami` = 'root' ]; then
-        su -s /bin/sh -c "$BASEDIR/lib/$AGENTNAME $BASEDIR" nobody &
-        echo -n $! >$PIDFILE
-        chown $RUNAS $PIDFILE
-    else
-        $BASEDIR/lib/$AGENTNAME $BASEDIR &
-        echo -n $! >$PIDFILE
-    fi
-    status
-}
-
-stop() {
-    getstatus
-    if [ $STATUS -ne 1 ]; then
-        ERROR=1
-        status
-        exit 1
-    fi
-    # kill everything matching lib/trafikito_
-    PIDS=`pgrep -f 'lib/trafikito_'`
-    kill -9 $PIDs
-    rm -f $PIDFILE
-    status
-}
-
-status() {
-    getstatus
-    if [ "$ERROR" ]; then
-        Already=" already"
-        Error="** Error: "
-    else
-        Already=""
-        Error=""
-    fi
-    case $STATUS in
-        0) echo "${Error}Trafikito agent is$Already stopped" ;;
-        1) echo "${Error}Trafikito agent is$Already running (pid $PID)" ;;
-        2) echo "${Error}Trafikito agent pid file exists but agent has died: fix ''sudo rm $PIDFILE''" ;;
-        3) echo "${Error}Trafikito agent one or more instances of agent is running: fix with 'sudo kill -9 "$PID"'" ;;
-        *) echo "${Error}Trafikito agent assert error! (STATUS=$STATUS)"
-    esac
-}
-
-if [ $# -ne 1 ]; then
-    usage
-fi
-
-case $1 in
-    start)   needroot;  start   ;;
-    stop)    needroot;  stop    ;;
-    restart) needroot;  stop; start ;;
-    status)  status  ;;
     *) usage
 esac
