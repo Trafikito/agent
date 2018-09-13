@@ -28,7 +28,7 @@
 
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 1 ]; then
-    echo "Usage: $0 <trafikito base dir>" 1>&2
+    echo "Usage: $0 <trafikito_base_dir>" 1>&2
     exit 1
 fi
 export BASEDIR=$1
@@ -38,17 +38,11 @@ DEBUG=1
 
 
 # agent version: will be compared as a string
-export AGENT_VERSION=14
+export AGENT_VERSION=15
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
 URL="https://ap-southeast-1.api.trafikito.com"
-export URL_OUTPUT="$URL/v2/agent/output"
-export URL_GET_CONFIG="$URL/v2/agent/get"
-export URL_DOWNLOAD="$URL/v2/agent/get_agent_file?file="
-
-# for pgp testing TODO
-#export URL_DOWNLOAD=http://tui.home/trafikito/
 
 # trim logfile to 100 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
@@ -155,6 +149,34 @@ fn_execute_trafikito_cmd() {
     fi
 }
 
+##############################
+# functions to do agent update
+##############################
+fn_download()
+{
+    case `hostname -f` in
+        *home) echo "http://tui.home/trafikito/$1" ;;
+            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+    esac
+}
+
+fn_upgrade()
+{
+    fn_debug "*** Starting to download agent files"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
+    fn_debug "*** 1/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
+    fn_debug "*** 2/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+    fn_debug "*** 3/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
+    fn_debug "*** 4/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
+    fn_debug "*** 5/5 done"
+
+    chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
+}
+
 ##################################################
 # start of main
 ##################################################
@@ -190,17 +212,21 @@ done
 echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
 cat "$BASEDIR/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
 
-curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
+# TODO curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
+curl --request POST \
      --url     "$URL/v2/agent/save_output" \
      --form    output=@$TMP_FILE \
      --form    serverId=$SERVER_ID \
      --form    serverApiKey=$API_KEY
-
-fn_debug "DONE!"
+if [ $? -ne 0 ]; then
+    fn_log "**ERROR: data sending failed: curl error code $?"
+fi
 
 # test if need to upgrade/downgrade agent
 if [ $AGENT_VERSION != $AGENT_NEW_VERSION ]; then
     fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
-    # TODO
-    fn_log "  TODO: download lib/*!"
+    fn_upgrade
 fi
+
+fn_log "agent run complete";
+
