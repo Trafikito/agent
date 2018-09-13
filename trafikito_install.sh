@@ -164,6 +164,9 @@ mkdir $BASEDIR/etc
 mkdir $BASEDIR/lib
 mkdir $BASEDIR/var
 
+echo "0" >$BASEDIR/var/cycle_delay
+echo "0" >$BASEDIR/var/time_took_last_time.tmp
+
 # build config and source it
 CONFIG="$BASEDIR/etc/trafikito.cfg"
 (
