@@ -157,6 +157,28 @@ fn_execute_trafikito_cmd() {
     fi
 }
 
+##########################
+# install a widget
+##########################
+fn_install_trafikito_widget() {
+    # can execute only commands with trafikito_ in it
+    WIDGET_ID=$1
+    data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
+               --url     "$URL/v2/widget/get-command" \
+               --header  "Content-Type: application/json" \
+               --data "{ \"widgetId\": \"$WIDGET_ID\" }"
+    `
+
+    echo $data >>$BASEDIR/available_commands.sh
+    data=`echo $data | awk -F "=" '{print $1}'`
+
+    data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
+               --url     "$URL/v2/widget/install" \
+               --header  "Content-Type: application/json" \
+               --data "{ \"serverApiKey\": \"$API_KEY\", \"serverId\": \"$SERVER_ID\", \"widgetId\": \"$WIDGET_ID\", \"cmd\": \"$data\" }"
+    `
+}
+
 ##################################################
 # start of main
 ##################################################
@@ -186,6 +208,14 @@ do
     fn_log "Running $cmd"
     fn_execute_trafikito_cmd "$cmd"
     fn_log "  $cmd is done"
+done
+
+# Install widgets
+for widget in $WIDGETS
+do
+    fn_log "Installing $widget"
+    fn_install_trafikito_widget "$widget"
+    fn_log "  $widget installation is done"
 done
 
 # collect available commands from available_commands.sh
