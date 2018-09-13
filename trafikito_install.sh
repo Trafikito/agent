@@ -253,16 +253,65 @@ fn_download ()
 }
 
 echo "*** Starting to download agent files"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
-echo "*** 1/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
-echo "*** 2/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
-echo "*** 3/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
-echo "*** 4/5 done"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
-echo "*** 5/5 done"
+file="${BASEDIR}/trafikito"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+if [ ! -f "$file" ]; then
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 1/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 1/5 done"
+fi
+
+file="${BASEDIR}/uninstall.sh"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 2/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 2/5 done"
+fi
+
+file="${BASEDIR}/lib/trafikito_wrapper.sh"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 3/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 3/5 done"
+fi
+
+file="${BASEDIR}/lib/trafikito_agent.sh"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 4/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 4/5 done"
+fi
+
+file="${BASEDIR}/lib/set_os.sh"
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
+if [ ! -f "$file" ]; then
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+    if [ ! -f "$file" ]; then
+        echo "*** 5/5 Failed to download: $file"
+        exit 1;
+    fi
+else
+    echo "*** 5/5 done"
+fi
 
 echo
 chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
