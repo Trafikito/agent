@@ -259,7 +259,8 @@ echo "*** Starting to download agent files"
 file="${BASEDIR}/trafikito"
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
 if [ ! -f "$file" ]; then
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
+    echo "*** 1/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download trafikito` > /dev/null
     if [ ! -f "$file" ]; then
         echo "*** 1/5 Failed to download: $file"
         exit 1;
@@ -271,7 +272,8 @@ fi
 file="${BASEDIR}/uninstall.sh"
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
+    echo "*** 2/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download uninstall.sh` > /dev/null
     if [ ! -f "$file" ]; then
         echo "*** 2/5 Failed to download: $file"
         exit 1;
@@ -283,7 +285,8 @@ fi
 file="${BASEDIR}/lib/trafikito_wrapper.sh"
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+    echo "*** 3/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
     if [ ! -f "$file" ]; then
         echo "*** 3/5 Failed to download: $file"
         exit 1;
@@ -295,7 +298,8 @@ fi
 file="${BASEDIR}/lib/trafikito_agent.sh"
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
+    echo "*** 4/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
     if [ ! -f "$file" ]; then
         echo "*** 4/5 Failed to download: $file"
         exit 1;
@@ -307,7 +311,8 @@ fi
 file="${BASEDIR}/lib/set_os.sh"
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/set_os.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/set_os.sh` > /dev/null
+    echo "*** 5/5 Failed to download. Retrying."
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/set_os.sh` > /dev/null
     if [ ! -f "$file" ]; then
         echo "*** 5/5 Failed to download: $file"
         exit 1;
@@ -317,7 +322,7 @@ else
 fi
 
 echo
-chmod +x "${BASEDIR}/trafikito ${BASEDIR}/lib/*"
+chmod +x "${BASEDIR}/trafikito" "${BASEDIR}/lib/set_os.sh" "${BASEDIR}/lib/trafikito_agent.sh" "${BASEDIR}/lib/trafikito_wrapper.sh"
 
 # get os facts
 . "${BASEDIR}/lib/set_os.sh"
@@ -406,6 +411,12 @@ if [ $? -eq 0 ]; then
     echo "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
+        # remove previous installation
+        if [ -f /etc/systemd/system/trafikito.service ]; then
+            systemctl disable trafikito
+            rm /etc/systemd/system/trafikito.service
+        fi
+
         (
         echo "[Unit]"
         echo "Description=Trafikito Agent"

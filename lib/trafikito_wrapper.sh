@@ -33,26 +33,26 @@ if [ $# -ne 2 ]; then
     echo "Usage: $0 <server_id> <trafikito-home>" 1>&2
     exit 1
 fi
-export BASEDIR=$2
+export BASEDIR="$2"
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 START_ON=`date +%S | sed s/^0//`
 while true; do
     sec=`date +%S`
-    while [ $sec -ne $START_ON ]; do
+    while [ "$sec" -ne "$START_ON" ]; do
         sleep 1
         sec=`date +%S`
     done
 
-    sh $BASEDIR/lib/trafikito_agent.sh $BASEDIR
-    CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay`
+    sh "${BASEDIR}/lib/trafikito_agent.sh" "$BASEDIR"
+    CYCLE_DELAY=`cat "${BASEDIR}/var/cycle_delay"`
     sleep 1 # in case run takes less than 1 sec
-   
-    if [ $CYCLE_DELAY -gt 0 ]; then
+
+    if [ "$CYCLE_DELAY" -gt 0 ]; then
         echo -n "START_ON $START_ON -> "
         START_ON=$((START_ON + CYCLE_DELAY))
         START_ON=$((START_ON % 60))
-        echo $START_ON
+        echo "$START_ON"
     fi
 done
