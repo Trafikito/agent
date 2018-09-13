@@ -47,4 +47,5 @@ if [ -f /etc/systemd/system/trafikito.service ]; then
 fi
 
 # now remove everything in BASEDIR
+# TODO add confirmation which user has to type in
 echo rm -r "$BASEDIR"

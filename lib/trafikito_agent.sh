@@ -33,7 +33,7 @@ if [ $# -ne 1 ]; then
     echo "Usage: $0 <trafikito base dir>" 1>&2
     exit 1
 fi
-export BASEDIR="$1"
+export BASEDIR=$1
 
 # SYNOPSIS: The real trafikito agent
 DEBUG=1
@@ -41,33 +41,33 @@ DEBUG=1
 
 # agent version: will be compared as a string
 export AGENT_VERSION=14
-export AGENT_NEW_VERSION="$AGENT_VERSION"  # redefined in fn_set_available_commands
+export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
 URL="https://ap-southeast-1.api.trafikito.com"
-export URL_OUTPUT="${URL}/v2/agent/output"
-export URL_GET_CONFIG="${URL}/v2/agent/get"
-export URL_DOWNLOAD="${URL}/v2/agent/get_agent_file?file="
+export URL_OUTPUT=$URL/v2/agent/output
+export URL_GET_CONFIG=$URL/v2/agent/get
+export URL_DOWNLOAD=$URL/v2/agent/get_agent_file?file=
 
 # for pgp testing TODO
 #export URL_DOWNLOAD=http://tui.home/trafikito/
 
 # trim logfile to 1000 lines
-export LOGFILE="${BASEDIR}/var/trafikito.log"
-if [ -f "$LOGFILE" ]; then
-    cp "$LOGFILE" "$LOGFILE.bak"
-    tail -n 1000 "$LOGFILE.bak" >"$LOGFILE"
+export LOGFILE=$BASEDIR/var/trafikito.log
+if [ -f $LOGFILE ]; then
+    cp $LOGFILE $LOGFILE.bak
+    tail -n 1000 $LOGFILE.bak >$LOGFILE
 fi
 
 # source config
-. "${BASEDIR}/etc/trafikito.cfg" || exit 1
+. $BASEDIR/etc/trafikito.cfg || exit 1
 
 # source available commands
-# TODO make this more robust!
-. "${BASEDIR}/available_commands.sh" || exit 1
+# TODO sanitize the file and check if format is correct if not - send to Trafikito API error which will be delivered to client
+. $BASEDIR/available_commands.sh || exit 1
 
 # source function to set os facts || exit 1
-. "${BASEDIR}/lib/set_os.sh"
+. $BASEDIR/lib/set_os.sh
 
 ###################################################
 # functions to handle logs instead of using syslog
@@ -116,13 +116,13 @@ fn_get_config() {
     fi
 
     # parse data
-    set "$data"
-    CALL_TOKEN="$1"
-    COMMANDS_TO_RUN=`echo "$2" | sed -e 's/,/ /g'`
-    AGENT_NEW_VERSION="$3"
-    CYCLE_DELAY="$4"
-    TIME_INTERVAL="$5"
-    WIDGETS=`echo "$6" | sed -e 's/,/ /g'`
+    set $data
+    CALL_TOKEN=$1
+    COMMANDS_TO_RUN=`echo $2 | sed -e 's/,/ /g'`
+    AGENT_NEW_VERSION=$3
+    CYCLE_DELAY=$4
+    TIME_INTERVAL=$5
+    WIDGETS=`echo $6 | sed -e 's/,/ /g'`
 
     fn_debug "    CALL_TOKEN $CALL_TOKEN"
     fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
@@ -145,12 +145,12 @@ fn_execute_trafikito_cmd() {
         echo "No command specified for execute_trafikito_cmd. Command: $cmd"
     elif [ $(echo "$cmd" | grep "trafikito_" | sed "s/[^a-zA-Z_]*//g") = "$cmd" ]; then
         # can execute, let's do it. Echo commands delimiter:
-        echo "*-*-*-*------------ Trafikito command: $cmd" >> "$TMP_FILE"
+        echo "*-*-*-*------------ Trafikito command: $cmd" >>$TMP_FILE
         # $cmd is validated. has trafikito_ prefix and is single word with a-Z and _ characters.
         cmd="$(eval echo "\$$cmd")"
 
         # $cmd command is set by user at available_commands.sh
-        eval "$cmd >> ${TMP_FILE} 2>&1"
+        eval "$cmd >> $TMP_FILE 2>&1"
     else
         # can not execute command without trafikito_ prefix
         echo "Can not execute command without trafikito_ prefix. Command: $cmd"
@@ -174,11 +174,11 @@ fi
 
 # save CYCLE_DELAY and TIME_INTERVAL for wrapper
 #CYCLE_DELAY=2
-echo "$CYCLE_DELAY"   >"${BASEDIR}/var/cycle_delay"
-echo "$TIME_INTERVAL" >"${BASEDIR}/var/time_interval"
+echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay
+echo $TIME_INTERVAL >$BASEDIR/var/time_interval
 
 # create new tmp file
->"$TMP_FILE"
+>$TMP_FILE
 
 # Run commands and send results to tmp file
 for cmd in $COMMANDS_TO_RUN
@@ -189,23 +189,23 @@ do
 done
 
 # collect available commands from available_commands.sh
-echo "*-*-*-*------------ Available commands:" >> "$TMP_FILE"
-cat "${BASEDIR}/available_commands.sh" | grep -v "#" >> "$TMP_FILE"
+echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
+cat $BASEDIR/available_commands.sh | grep -v "#" >>$TMP_FILE
 
-TIME_TOOK_LAST_TIME=`cat "${BASEDIR}/var/time_took_last_time.tmp"`
+TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
 
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
-     --url     "${URL}/v2/agent/save_output" \
-     --form    output=@"$TMP_FILE" \
-     --form    timeTookLastTime="$TIME_TOOK_LAST_TIME" \
-     --form    serverId="$SERVER_ID" \
-     --form    serverApiKey="$API_KEY"
+     --url     $URL/v2/agent/save_output \
+     --form    output=@$TMP_FILE \
+     --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
+     --form    serverId=$SERVER_ID \
+     --form    serverApiKey=$API_KEY
      `
 fn_log "Save result: $saveResult"
 fn_debug "DONE!"
 
 END=$(date +%s)
-echo "$(($END-$START))" >"${BASEDIR}/var/time_took_last_time.tmp"
+echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp
 
 # test if need to upgrade/downgrade agent
 if [ "$AGENT_VERSION" != "$AGENT_NEW_VERSION" ]; then

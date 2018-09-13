@@ -41,23 +41,30 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 export URL="https://ap-southeast-1.api.trafikito.com"
 
+# remove previous installation
+# TODO fix this for not root user
+if [ -f /etc/systemd/system/trafikito.service ]; then
+    systemctl disable trafikito 2>/dev/null
+    rm /etc/systemd/system/trafikito.service 2>/dev/null
+fi
+
 ECHO=/bin/echo
 fn_prompt() {
-    default="$1"
-    mesg="$2"
+    default=$1
+    mesg=$2
     # if not running with a tty returns $default
     if [ ! "`tty`" ]; then
         return 1
     fi
     while true; do
-        "$ECHO" -n "$mesg "; read x
+        $ECHO -n "$mesg "; read x
         if [ -z "$x" ]; then
             answer="$default"
         else
             case "$x" in
                 y*|Y*) answer=Y ;;
                 n*|N*) answer=N ;;
-                *) "$ECHO" "Please reply y or n"
+                *) $ECHO "Please reply y or n"
                 continue
             esac
         fi
@@ -130,17 +137,17 @@ while true; do
     fn_prompt "Y" "Going to install Trafikito in $BASEDIR [Yn]: "
     if [ $? -eq 0 ]; then
         echo -n "  Enter directory for installation: "; read BASEDIR
-        echo "$BASEDIR" | grep -q '^\/'
+        echo $BASEDIR | grep -q '^\/'
         if [ $? -ne 0 ]; then
             echo "Directory for installation must be an absolute path"
             BASEDIR="/opt/trafikito"
         fi
         continue
     fi
-    if [ -d "$BASEDIR" ]; then
+    if [ -d $BASEDIR ]; then
         fn_prompt "Y" "  Found existing $BASEDIR: okay to remove it? [Yn]: "
         if [ $? -eq 1 ]; then
-            reason=`rm -rf "$BASEDIR" 2>&1`
+            reason=`rm -rf $BASEDIR 2>&1`
             if [ $? -ne 0 ]; then
                 echo "  Remove failed: $reason - please try again"
                 continue
@@ -152,41 +159,42 @@ while true; do
     break
 done
 
-mkdir -p "$BASEDIR" 2>/dev/null
+mkdir -p $BASEDIR 2>/dev/null
 if [ $? -ne 0 ]; then
     fn_prompt "Y" "Found existing $BASEDIR: okay to remove it? [Yn]: "
-    rm -rf "$BASEDIR"
-    mkdir -p "$BASEDIR" || exit 1
+    rm -rf $BASEDIR
+    mkdir -p $BASEDIR || exit 1
 fi
 
 # create std subdirs
-mkdir -p "${BASEDIR}/etc"
-mkdir -p "${BASEDIR}/lib"
-mkdir -p "${BASEDIR}/var"
+mkdir -p $BASEDIR/etc
+mkdir -p $BASEDIR/lib
+mkdir -p $BASEDIR/var
 
-echo "0" >"${BASEDIR}/var/cycle_delay"
-echo "0" >"${BASEDIR}/var/time_took_last_time.tmp"
+echo "0" >$BASEDIR/var/cycle_delay
+echo "0" >$BASEDIR/var/time_took_last_time.tmp
 
 # build config and source it
-CONFIG="$BASEDIR/etc/trafikito.cfg"
+CONFIG=$BASEDIR/etc/trafikito.cfg
 (
 echo export RUNAS=\"$RUNAS\"
 echo export USER_API_KEY=\"$USER_API_KEY\"
 echo export WORKSPACE_ID=\"$WORKSPACE_ID\"
 echo export SERVER_NAME=\"$SERVER_NAME\"
 echo export TMP_FILE=\"$BASEDIR/var/trafikito.tmp\"
-) >"$CONFIG"
-. "$CONFIG"
+) >$CONFIG
+
+. $CONFIG
 
 # function to install a tool
 fn_install_tool() {
-    tool="$1"
-    help="$2"
-    pkg="$tool"  # in case $tool is in a package
+    tool=$1
+    help=$2
+    pkg=$tool  # in case $tool is in a package
     echo -n "  $tool - $help: "
 
     # check if command is installed
-    x=`which "$tool"`
+    x=`which $tool`
     if [ -z "$x" ]; then
         echo "not found - going to install it"
     else
@@ -248,6 +256,7 @@ echo "* Installing agent..."
 
 fn_download ()
 {
+    # for development
     if [ `hostname` = 'tui' ]; then
         echo "http://tui.home/trafikito/$1"
     else
@@ -256,7 +265,7 @@ fn_download ()
 }
 
 echo "*** Starting to download agent files"
-file="${BASEDIR}/trafikito"
+file=$BASEDIR/trafikito
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
 if [ ! -f "$file" ]; then
     echo "*** 1/5 Failed to download. Retrying."
@@ -269,7 +278,7 @@ else
     echo "*** 1/5 done"
 fi
 
-file="${BASEDIR}/uninstall.sh"
+file=$BASEDIR/uninstall.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
 if [ ! -f "$file" ]; then
     echo "*** 2/5 Failed to download. Retrying."
@@ -282,7 +291,7 @@ else
     echo "*** 2/5 done"
 fi
 
-file="${BASEDIR}/lib/trafikito_wrapper.sh"
+file=$BASEDIR/lib/trafikito_wrapper.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
 if [ ! -f "$file" ]; then
     echo "*** 3/5 Failed to download. Retrying."
@@ -295,7 +304,7 @@ else
     echo "*** 3/5 done"
 fi
 
-file="${BASEDIR}/lib/trafikito_agent.sh"
+file=$BASEDIR/lib/trafikito_agent.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
 if [ ! -f "$file" ]; then
     echo "*** 4/5 Failed to download. Retrying."
@@ -308,7 +317,7 @@ else
     echo "*** 4/5 done"
 fi
 
-file="${BASEDIR}/lib/set_os.sh"
+file=$BASEDIR/lib/set_os.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/set_os.sh` > /dev/null
 if [ ! -f "$file" ]; then
     echo "*** 5/5 Failed to download. Retrying."
@@ -322,10 +331,10 @@ else
 fi
 
 echo
-chmod +x "${BASEDIR}/trafikito" "${BASEDIR}/lib/set_os.sh" "${BASEDIR}/lib/trafikito_agent.sh" "${BASEDIR}/lib/trafikito_wrapper.sh"
+chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
 
 # get os facts
-. "${BASEDIR}/lib/set_os.sh"
+. $BASEDIR/lib/set_os.sh
 fn_set_os
 
 echo "* Create server and get config file"
@@ -337,7 +346,7 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
         \"userApiKey\": \"$USER_API_KEY\", \
         \"serverName\": \"$SERVER_NAME\", \
         \"tmpFilePath\": \"$TMP_FILE\" \
-        }" >"$TMP_FILE"
+        }" >$TMP_FILE
 # LUKAS: The only stuff I need from this is the serverid and api_key as follows
 # (the config file has moved to $TRAFIKITO/etc/trafikito.conf)
 # SERVER_ID="jhgfhjgff"
@@ -347,13 +356,13 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
 # will the Trafikito API URLs change? If not we don't need it
 
 
-export SERVER_ID=`grep server_id "$TMP_FILE" | sed -e 's/.*= //'`
-export API_KEY=`grep api_key   "$TMP_FILE" | sed -e 's/.*= //'`
-echo export SERVER_ID=\"$SERVER_ID\" >>"$CONFIG"
-echo export API_KEY=\"$API_KEY\"     >>"$CONFIG"
+export SERVER_ID=`grep server_id $TMP_FILE | sed -e 's/.*= //'`
+export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
+echo export SERVER_ID=$SERVER_ID >>$CONFIG
+echo export API_KEY=$API_KEY     >>$CONFIG
 
 echo "* Generating initial settings"
->"$TMP_FILE"
+>$TMP_FILE
 (
 cat <<STOP
 trafikito_free="free"
@@ -375,8 +384,8 @@ STOP
 ) | while read line; do
     command=`echo "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
     echo "  executing $command..."
-    echo "*-*-*-*------------ Trafikito command: $command" >>"$TMP_FILE"
-    eval ${command} >>"$TMP_FILE" 2>&1
+    echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
+    eval "$command" >>$TMP_FILE 2>&1
 done
 
 echo "* Getting available commands file & setting default dashboard"
@@ -391,10 +400,10 @@ curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --form   "osCodename=$os_codename" \
      --form   "osRelease=$os_release" \
      --form   "centosFlavor=$centos_flavor" \
-     --output "${BASEDIR}/available_commands.sh"
+     --output "$BASEDIR/available_commands.sh"
 
 # now everything will be owned by $RUNAS
-chown -R "$RUNAS" "$BASEDIR"
+chown -R "$RUNAS" $BASEDIR
 
 # configure restart
 if [ "$WHOAMI" != "root" ]; then
@@ -411,19 +420,13 @@ if [ $? -eq 0 ]; then
     echo "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
-        # remove previous installation
-        if [ -f /etc/systemd/system/trafikito.service ]; then
-            systemctl disable trafikito
-            rm /etc/systemd/system/trafikito.service
-        fi
-
         (
         echo "[Unit]"
         echo "Description=Trafikito Agent"
         echo "After=network.target"
         echo "[Service]"
         echo "Type=simple"
-        echo "ExecStart=${BASEDIR}/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
+        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
         echo "User=nobody"
         echo "Group=nogroup"
         echo "[Install]"
