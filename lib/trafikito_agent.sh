@@ -105,31 +105,44 @@ fn_get_config() {
 
     # server removed from UI or other reason to stop?
     case $data in STOP*)
+        fn_log "Stopping the agent. Reason: $data"
         # STOP the agent
 
         WHOAMI=`whoami`
 
         # remove systemd config
         if [ -f /etc/systemd/system/trafikito.service ]; then
+            fn_log "Trying to remove systemd config"
             if [ $WHOAMI != 'root' ]; then
-                echo "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
-                echo "** Cannot continue!"
-                exit 1
+                fn_log "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
+            else
+                systemctl disable trafikito
+                rm /etc/systemd/system/trafikito.service
             fi
-            systemctl disable trafikito
-            rm /etc/systemd/system/trafikito.service
         fi
 
         # remove upstart config
         if [ -f /etc/init/trafikito.conf ]; then
+            fn_log "Trying to remove upstart config"
             if [ $WHOAMI != 'root' ]; then
-                echo "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
-                echo "** Cannot continue!"
-                exit 1
+                fn_log "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
+            else
+                initctl stop trafikito 2>/dev/null
+                rm /etc/init/trafikito.conf
             fi
-            initctl stop trafikito 2>/dev/null
-            rm /etc/init/trafikito.conf
         fi
+
+        PID=`pgrep -f "trafikito_wrapper.sh $1"`
+        if [ $? -ne 0 ]; then
+            fn_log "Trafikito agent not running" 1>&2
+            return
+        else
+            fn_log "Agent PID: $PID. Trying to stop."
+            kill -9 "$PID"
+        fi
+
+        fn_log "Agent stopped"
+
         exit 1
     esac
 
