@@ -40,12 +40,32 @@ echo ""
 BASEDIR="${0%/*}"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
+while true; do
+    /bin/echo -n "Do you want to uninstall the Trafikto agent and remove $BASEDIR? (yes or no): "; read x
+    if [ "$x" = 'yes' ]; then
+        break
+    fi
+    echo "** Uninstall aborted!"
+    exit 0
+done
+
+WHOAMI=`whoami`
+
 # remove systemd config
 if [ -f /etc/systemd/system/trafikito.service ]; then
+    if [ $WHOAMI != 'root' ]; then
+        echo "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
+        echo "** Cannot continue!"
+        exit 1
+    fi
     systemctl disable trafikito
     rm /etc/systemd/system/trafikito.service
 fi
 
 # now remove everything in BASEDIR
-# TODO add confirmation which user has to type in
-echo rm -r "$BASEDIR"
+rm -rf "$BASEDIR"
+if [ $? -ne 0 ]; then
+    echo "** Removing $BASEDIR failed! Looks like you don't have write permission"
+fi
+
+echo "Trafikito where successfully uninstalled"

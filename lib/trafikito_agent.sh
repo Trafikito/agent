@@ -26,31 +26,27 @@
 #  * SUCH DAMAGE.
 #  */
 
+# SYNOPSIS: The real trafikito agent
+
 START=$(date +%s)
 
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 1 ]; then
-    echo "Usage: $0 <trafikito base dir>" 1>&2
+    echo "Usage: $0 <trafikito_base_dir>" 1>&2
     exit 1
 fi
 export BASEDIR=$1
 
-# SYNOPSIS: The real trafikito agent
+# TODO remove this in production
 DEBUG=1
 
 
 # agent version: will be compared as a string
-export AGENT_VERSION=14
+export AGENT_VERSION=15
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
 URL="https://ap-southeast-1.api.trafikito.com"
-export URL_OUTPUT=$URL/v2/agent/output
-export URL_GET_CONFIG=$URL/v2/agent/get
-export URL_DOWNLOAD=$URL/v2/agent/get_agent_file?file=
-
-# for pgp testing TODO
-#export URL_DOWNLOAD=http://tui.home/trafikito/
 
 # trim logfile to 1000 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
@@ -110,7 +106,7 @@ fn_get_config() {
     echo "$data" | grep -q error
     if [ $? -eq 0 ]; then
         # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED","env":"production"},"data":null}
-        error=`echo "$data" | sed -e 's/message":"//' -e 's/".*//'`
+        error=`echo "$data" | sed -e 's/.*message":"//' -e 's/".*//'`
         fn_log "curl returned Trafikito error '$error': cannot complete run"
         return 1
     fi
@@ -157,6 +153,34 @@ fn_execute_trafikito_cmd() {
     fi
 }
 
+##############################
+# functions to do agent update
+##############################
+fn_download()
+{
+    case `hostname -f` in
+        *home) echo "http://tui.home/trafikito/$1" ;;
+            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+    esac
+}
+
+fn_upgrade()
+{
+    fn_debug "*** Starting to download agent files"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
+    fn_debug "*** 1/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
+    fn_debug "*** 2/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+    fn_debug "*** 3/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
+    fn_debug "*** 4/5 done"
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
+    fn_debug "*** 5/5 done"
+
+    chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
+}
+
 ##########################
 # install a widget
 ##########################
@@ -167,7 +191,7 @@ fn_install_trafikito_widget() {
                --url     "$URL/v2/widget/get-command" \
                --header  "Content-Type: application/json" \
                --data "{ \"widgetId\": \"$WIDGET_ID\" }"
-    `
+        `
 
     echo $data >>$BASEDIR/available_commands.sh
     data=`echo $data | awk -F "=" '{print $1}'`
@@ -196,8 +220,8 @@ fi
 
 # save CYCLE_DELAY and TIME_INTERVAL for wrapper
 #CYCLE_DELAY=2
-echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay
-echo $TIME_INTERVAL >$BASEDIR/var/time_interval
+echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay.tmp
+echo $TIME_INTERVAL >$BASEDIR/var/time_interval.tmp
 
 # create new tmp file
 >$TMP_FILE
@@ -222,7 +246,10 @@ done
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
 cat $BASEDIR/available_commands.sh | grep -v "#" >>$TMP_FILE
 
-TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+TIME_TOOK_LAST_TIME=0
+if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
+    TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+fi
 
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     $URL/v2/agent/save_output \
@@ -231,6 +258,10 @@ saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30
      --form    serverId=$SERVER_ID \
      --form    serverApiKey=$API_KEY
      `
+
+if [ $? -ne 0 ]; then
+    fn_log "**ERROR: data sending failed: curl error code $?"
+fi
 fn_log "Save result: $saveResult"
 fn_debug "DONE!"
 
@@ -240,6 +271,8 @@ echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp
 # test if need to upgrade/downgrade agent
 if [ "$AGENT_VERSION" != "$AGENT_NEW_VERSION" ]; then
     fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
-    # TODO
-    fn_log "  TODO: download lib/*!"
+    fn_upgrade
 fi
+
+fn_log "agent run complete";
+

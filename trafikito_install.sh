@@ -41,13 +41,6 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 export URL="https://ap-southeast-1.api.trafikito.com"
 
-# remove previous installation
-# TODO fix this for not root user
-if [ -f /etc/systemd/system/trafikito.service ]; then
-    systemctl disable trafikito 2>/dev/null
-    rm /etc/systemd/system/trafikito.service 2>/dev/null
-fi
-
 ECHO=/bin/echo
 fn_prompt() {
     default=$1
@@ -170,9 +163,6 @@ fi
 mkdir -p $BASEDIR/etc
 mkdir -p $BASEDIR/lib
 mkdir -p $BASEDIR/var
-
-echo "0" >$BASEDIR/var/cycle_delay
-echo "0" >$BASEDIR/var/time_took_last_time.tmp
 
 # build config and source it
 CONFIG=$BASEDIR/etc/trafikito.cfg
@@ -331,7 +321,7 @@ else
 fi
 
 echo
-chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
+chmod +x $BASEDIR/trafikito $BASEDIR/uninstall.sh $BASEDIR/lib/*
 
 # get os facts
 . $BASEDIR/lib/set_os.sh
@@ -420,6 +410,10 @@ if [ $? -eq 0 ]; then
     echo "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
+        # silently stop and remove systemd config
+        systemctl stop trafikito 2>/dev/null
+        systemctl disable trafikito 2>/dev/null
+        rm /etc/systemd/system/trafikito.service 2>/dev/null
         (
         echo "[Unit]"
         echo "Description=Trafikito Agent"
