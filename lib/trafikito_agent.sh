@@ -55,6 +55,8 @@ if [ -f $LOGFILE ]; then
     tail -n 1000 $LOGFILE.bak >$LOGFILE
 fi
 
+LAST_CONFIG=$BASEDIR/var/last_config.tmp
+
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
@@ -91,11 +93,28 @@ fn_debug() {
 #   1 error and log error
 ##########################################################
 fn_get_config() {
+    LAST_DATA=`cat $BASEDIR/var/last_config.tmp`
+    set $LAST_DATA
+    CALL_TOKEN=$1
+    COMMANDS_TO_RUN=`echo $2 | sed -e 's/,/ /g'`
+    AGENT_NEW_VERSION=$3
+    CYCLE_DELAY=$4
+    WIDGETS=`echo $5 | sed -e 's/,/ /g'`
+
+    fn_debug "Previous hash: $CALL_TOKEN"
+
     data=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
                --url     "$URL/v2/agent/get_config" \
                --header  "Content-Type: application/json" \
-               --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\" }"
+               --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\", \"previous\": \"$CALL_TOKEN\" }"
         `
+    fn_debug "Got data: $data"
+
+    case $data in =)
+        fn_debug "Using config from cache"
+        return 0
+    esac
+
     # check for curl error
     if [ $? -ne 0 ]; then
         fn_log "curl returned curl error code $?: cannot complete run"
@@ -154,6 +173,10 @@ fn_get_config() {
         return 1
     fi
 
+    fn_debug "Saving config to cache file"
+
+    echo $data >$LAST_CONFIG
+
     # parse data
     set $data
     CALL_TOKEN=$1
@@ -161,12 +184,6 @@ fn_get_config() {
     AGENT_NEW_VERSION=$3
     CYCLE_DELAY=$4
     WIDGETS=`echo $5 | sed -e 's/,/ /g'`
-
-    fn_debug "    CALL_TOKEN $CALL_TOKEN"
-    fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
-    fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
-    fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
-    fn_debug "    WIDGETS $WIDGETS"
 
     return 0
 }
@@ -254,6 +271,13 @@ fn_set_os
 
 # get config from trafikito
 fn_get_config
+
+fn_debug "    CALL_TOKEN $CALL_TOKEN"
+fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
+fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
+fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
+fn_debug "    WIDGETS $WIDGETS"
+
 if [ $? -ne 0 ]; then
     fn_log "Skipping this run"
     exit 1
