@@ -37,13 +37,15 @@ export BASEDIR=$2
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-START_ON=`date +%S | sed s/^0//`
+NEXT_RUN=0
 while true; do
-    sec=`date +%S`
-    while [ "$sec" -ne "$START_ON" ]; do
+    NOW=`date +%s`
+    while [ "$NOW" -lt "$NEXT_RUN" ]; do
         sleep 1
-        sec=`date +%S`
+        NOW=`date +%s`
     done
+
+    NEXT_RUN=$((NOW + 60))
 
     # run agent
     sh $BASEDIR/lib/trafikito_agent.sh $BASEDIR
@@ -55,7 +57,6 @@ while true; do
     sleep 1 # in case run takes less than 1 sec
 
     if [ "$CYCLE_DELAY" -gt 0 ]; then
-        START_ON=$((START_ON + CYCLE_DELAY))
-        START_ON=$((START_ON % 60))
+        NEXT_RUN=$((NEXT_RUN + CYCLE_DELAY))
     fi
 done

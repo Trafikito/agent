@@ -42,7 +42,7 @@ DEBUG=1
 
 
 # agent version: will be compared as a string
-export AGENT_VERSION=16
+export AGENT_VERSION=17
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
@@ -85,7 +85,6 @@ fn_debug() {
 #   $COMMANDS_TO_RUN: commands to execute from Trafikito
 #   $AGENT_NEW_VERSION: current_agent_version for dynamic updates
 #   $CYCLE_DELAY: seconds to delay this cycle
-#   $TIME_INTERVAL: run interval
 #   $WIDGETS: , delimited list of widgets to install
 # returns:
 #   0 success
@@ -161,14 +160,12 @@ fn_get_config() {
     COMMANDS_TO_RUN=`echo $2 | sed -e 's/,/ /g'`
     AGENT_NEW_VERSION=$3
     CYCLE_DELAY=$4
-    TIME_INTERVAL=$5
-    WIDGETS=`echo $6 | sed -e 's/,/ /g'`
+    WIDGETS=`echo $5 | sed -e 's/,/ /g'`
 
     fn_debug "    CALL_TOKEN $CALL_TOKEN"
     fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
     fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
     fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
-    fn_debug "    TIME_INTERVAL $TIME_INTERVAL"
     fn_debug "    WIDGETS $WIDGETS"
 
     return 0
@@ -262,10 +259,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# save CYCLE_DELAY and TIME_INTERVAL for wrapper
+# save CYCLE_DELAY for wrapper
 #CYCLE_DELAY=2
 echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay.tmp
-echo $TIME_INTERVAL >$BASEDIR/var/time_interval.tmp
 
 # create new tmp file
 >$TMP_FILE
