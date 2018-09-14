@@ -130,6 +130,7 @@ fn_get_config() {
             initctl stop trafikito 2>/dev/null
             rm /etc/init/trafikito.conf
         fi
+        exit 1
     esac
 
     # check for trafikito error
