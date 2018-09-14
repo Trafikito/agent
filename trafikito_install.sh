@@ -431,4 +431,23 @@ if [ $? -eq 0 ]; then
         systemctl status trafikito
         exit 0
     fi
+else
+    echo "Was not able to install with systemd, trying to install with upstart..."
+    fn_prompt "Y" "Shall I configure, enable and start the agent with upstart? [Yn]: "
+    if [ $? -eq 1 ]; then
+        # silently stop and remove systemd config
+        initctl stop trafikito 2>/dev/null
+        rm /etc/init/trafikito.conf 2>/dev/null
+        (
+        echo "description \"Trafikito Agent\""
+        echo "start on runlevel [2345]"
+        echo "stop on runlevel [!2345]"
+        echo "respawn"
+        echo "exec $BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
+        ) >/etc/init/trafikito.conf
+        initctl reload-configuration
+        sleep 2
+        initctl start trafikito
+        exit 0
+    fi
 fi
