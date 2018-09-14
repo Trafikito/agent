@@ -26,6 +26,8 @@
 #  * SUCH DAMAGE.
 #  */
 
+# SYNOPSIS: The real trafikito agent
+
 START=$(date +%s)
 
 # basedir is $1 to enable this to run from anywhere
@@ -35,7 +37,7 @@ if [ $# -ne 1 ]; then
 fi
 export BASEDIR=$1
 
-# SYNOPSIS: The real trafikito agent
+# TODO remove this in production
 DEBUG=1
 
 
@@ -104,7 +106,7 @@ fn_get_config() {
     echo "$data" | grep -q error
     if [ $? -eq 0 ]; then
         # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED","env":"production"},"data":null}
-        error=`echo "$data" | sed -e 's/message":"//' -e 's/".*//'`
+        error=`echo "$data" | sed -e 's/.*message":"//' -e 's/".*//'`
         fn_log "curl returned Trafikito error '$error': cannot complete run"
         return 1
     fi
@@ -189,7 +191,7 @@ fn_install_trafikito_widget() {
                --url     "$URL/v2/widget/get-command" \
                --header  "Content-Type: application/json" \
                --data "{ \"widgetId\": \"$WIDGET_ID\" }"
-    `
+        `
 
     echo $data >>$BASEDIR/available_commands.sh
     data=`echo $data | awk -F "=" '{print $1}'`
@@ -218,8 +220,8 @@ fi
 
 # save CYCLE_DELAY and TIME_INTERVAL for wrapper
 #CYCLE_DELAY=2
-echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay
-echo $TIME_INTERVAL >$BASEDIR/var/time_interval
+echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay.tmp
+echo $TIME_INTERVAL >$BASEDIR/var/time_interval.tmp
 
 # create new tmp file
 >$TMP_FILE
@@ -244,19 +246,22 @@ done
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
 cat $BASEDIR/available_commands.sh | grep -v "#" >>$TMP_FILE
 
-TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+TIME_TOOK_LAST_TIME=0
+if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
+    TIME_TOOK_LAST_TIME=`cat $BASEDIR/var/time_took_last_time.tmp`
+fi
 
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     $URL/v2/agent/save_output \
      --form    output=@$TMP_FILE \
      --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
      --form    serverId=$SERVER_ID \
-     --form    serverApiKey=$API_KEY`
+     --form    serverApiKey=$API_KEY
+     `
 
 if [ $? -ne 0 ]; then
     fn_log "**ERROR: data sending failed: curl error code $?"
 fi
-     `
 fn_log "Save result: $saveResult"
 fn_debug "DONE!"
 

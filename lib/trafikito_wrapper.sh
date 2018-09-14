@@ -45,14 +45,17 @@ while true; do
         sec=`date +%S`
     done
 
+    # run agent
     sh $BASEDIR/lib/trafikito_agent.sh $BASEDIR
-    CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay` || "0"
+
+    CYCLE_DELAY=0
+    if [ -f $BASEDIR/var/cycle_delay.tmp ]; then
+        CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay.tmp`
+    fi
     sleep 1 # in case run takes less than 1 sec
 
     if [ "$CYCLE_DELAY" -gt 0 ]; then
-        echo -n "START_ON $START_ON -> "
         START_ON=$((START_ON + CYCLE_DELAY))
         START_ON=$((START_ON % 60))
-        echo "$START_ON"
     fi
 done
