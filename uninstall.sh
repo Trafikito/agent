@@ -62,6 +62,17 @@ if [ -f /etc/systemd/system/trafikito.service ]; then
     rm /etc/systemd/system/trafikito.service
 fi
 
+# remove upstart config
+if [ -f /etc/init/trafikito.conf ]; then
+    if [ $WHOAMI != 'root' ]; then
+        echo "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
+        echo "** Cannot continue!"
+        exit 1
+    fi
+    initctl stop trafikito 2>/dev/null
+    rm /etc/init/trafikito.conf
+fi
+
 # now remove everything in BASEDIR
 rm -rf "$BASEDIR"
 if [ $? -ne 0 ]; then

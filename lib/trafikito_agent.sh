@@ -102,6 +102,36 @@ fn_get_config() {
         fn_log "curl returned curl error code $?: cannot complete run"
         return 1
     fi
+
+    # server removed from UI or other reason to stop?
+    case $data in STOP*)
+        # STOP the agent
+
+        WHOAMI=`whoami`
+
+        # remove systemd config
+        if [ -f /etc/systemd/system/trafikito.service ]; then
+            if [ $WHOAMI != 'root' ]; then
+                echo "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
+                echo "** Cannot continue!"
+                exit 1
+            fi
+            systemctl disable trafikito
+            rm /etc/systemd/system/trafikito.service
+        fi
+
+        # remove upstart config
+        if [ -f /etc/init/trafikito.conf ]; then
+            if [ $WHOAMI != 'root' ]; then
+                echo "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
+                echo "** Cannot continue!"
+                exit 1
+            fi
+            initctl stop trafikito 2>/dev/null
+            rm /etc/init/trafikito.conf
+        fi
+    esac
+
     # check for trafikito error
     echo "$data" | grep -q error
     if [ $? -eq 0 ]; then
