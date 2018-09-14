@@ -42,7 +42,7 @@ DEBUG=1
 
 
 # agent version: will be compared as a string
-export AGENT_VERSION=15
+export AGENT_VERSION=16
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
@@ -207,7 +207,7 @@ fn_install_trafikito_widget() {
 # start of main
 ##################################################
 fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
-fn_log "agent run started"
+fn_log "Agent v${AGENT_VERSION} run started"
 
 fn_set_os
 
