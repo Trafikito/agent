@@ -130,16 +130,27 @@ while true; do
     fn_prompt "Y" "Going to install Trafikito in $BASEDIR [Yn]: "
     if [ $? -eq 0 ]; then
         echo -n "  Enter directory for installation: "; read BASEDIR
+        # test for starting /
         echo $BASEDIR | grep -q '^\/'
         if [ $? -ne 0 ]; then
-            echo "Directory for installation must be an absolute path"
+            echo "    Directory for installation must be an absolute path!"
             BASEDIR="/opt/trafikito"
+            continue
         fi
-        continue
+        # test for spaces in path
+        echo $BASEDIR | grep -vq ' '
+        if [ $? -ne 0 ]; then
+            echo "    Directory name for installation must not contain spaces!"
+            BASEDIR="/opt/trafikito"
+            continue
+        fi
     fi
     if [ -d $BASEDIR ]; then
         fn_prompt "Y" "  Found existing $BASEDIR: okay to remove it? [Yn]: "
         if [ $? -eq 1 ]; then
+            if [ -f $BASEDIR/lib/remove_startup.sh ]; then
+                . $BASEDIR/lib/remove_startup.sh
+            fi
             reason=`rm -rf $BASEDIR 2>&1`
             if [ $? -ne 0 ]; then
                 echo "  Remove failed: $reason - please try again"
@@ -247,11 +258,10 @@ echo "* Installing agent..."
 fn_download ()
 {
     # for development
-    if [ `hostname` = 'tui' ]; then
-        echo "http://tui.home/trafikito/$1"
-    else
-        echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
-    fi
+    case `hostname -f` in
+        *home) echo "http://tui.home/trafikito/$1" ;;
+            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+    esac
 }
 
 echo "*** Starting to download agent files"
@@ -337,14 +347,14 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
         \"serverName\": \"$SERVER_NAME\", \
         \"tmpFilePath\": \"$TMP_FILE\" \
         }" >$TMP_FILE
-# LUKAS: The only stuff I need from this is the serverid and api_key as follows
+
+# TODO LUKAS: The only stuff I need from this is the serverid and api_key as follows
 # (the config file has moved to $TRAFIKITO/etc/trafikito.conf)
 # SERVER_ID="jhgfhjgff"
 # API_KEY="jhgfhjgff"
 # capitals because that is standard for global variables in shell
 # no spaces before or after '=' and value protected with "..." (in case you allow an '=' to be part of the server id)
 # will the Trafikito API URLs change? If not we don't need it
-
 
 export SERVER_ID=`grep server_id $TMP_FILE | sed -e 's/.*= //'`
 export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
@@ -410,25 +420,33 @@ if [ $? -eq 0 ]; then
     echo "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
-        # silently stop and remove systemd config
-        systemctl stop trafikito 2>/dev/null
-        systemctl disable trafikito 2>/dev/null
-        rm /etc/systemd/system/trafikito.service 2>/dev/null
-        (
-        echo "[Unit]"
-        echo "Description=Trafikito Agent"
-        echo "After=network.target"
-        echo "[Service]"
-        echo "Type=simple"
-        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
-        echo "User=nobody"
-        echo "Group=nogroup"
-        echo "[Install]"
-        echo "WantedBy=multi-user.target"
-        ) >/etc/systemd/system/trafikito.service
-        systemctl enable trafikito
-        systemctl start trafikito
-        systemctl status trafikito
+
+        # WARNING: use hard tabs to indent until STOP
+        cat <<- STOP >/etc/systemd/system/trafikito.service
+		[Unit]
+		Description=Trafikito Agent
+		After=network.target
+		[Service]
+		Type=simple
+		ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR
+		User=nobody
+		Group=nogroup
+		[Install]
+		WantedBy=multi-user.target
+		STOP
+ 
+        # WARNING: use hard tabs to indent until STOP
+        cat <<- STOP >$BASEDIR/lib/remove_startup.sh
+		echo "  Disabling systemd"
+	    systemctl stop trafikito
+	    systemctl disable trafikito
+	    rm -f /etc/systemd/system/trafikito.service
+		STOP
+
+       systemctl enable trafikito
+       systemctl start trafikito
+       systemctl status trafikito
+
         exit 0
     fi
 fi
