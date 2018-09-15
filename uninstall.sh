@@ -51,15 +51,9 @@ done
 
 WHOAMI=`whoami`
 
-# remove systemd config
-if [ -f /etc/systemd/system/trafikito.service ]; then
-    if [ $WHOAMI != 'root' ]; then
-        echo "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
-        echo "** Cannot continue!"
-        exit 1
-    fi
-    systemctl disable trafikito
-    rm /etc/systemd/system/trafikito.service
+# remove startup config
+if [ -f $BASEDIR/lib/remove_startup.sh ]; then
+    . $BASEDIR/lib/remove_startup.sh
 fi
 
 # now remove everything in BASEDIR

@@ -300,7 +300,8 @@ echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp
 # test if need to upgrade/downgrade agent
 if [ "$AGENT_VERSION" != "$AGENT_NEW_VERSION" ]; then
     fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
-    fn_upgrade
+    fn_debug AGENT NOT UPGRADED
+    #fn_upgrade
 fi
 
 fn_log "agent run complete";

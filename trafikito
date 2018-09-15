@@ -58,8 +58,13 @@ stop() {
 status() {
     getstatus
     case $? in
-        0) set $PID; echo "Trafikito agent running (pid=$*)" 1>&2 ;;
-        1) echo "Trafikito agent stopped" 1>&2 ;;
+        0) set $PID
+           echo "Trafikito agent running (pid=$*)" 1>&2
+           ;;
+        1) echo "Trafikito agent stopped" 1>&2
+           echo 1>&2
+           tail $BASEDIR/var/trafikito.log 2>/dev/null
+           ;;
     esac
 }
 
