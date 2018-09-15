@@ -24,38 +24,43 @@
 #  * SUCH DAMAGE.
 #  */
 
-echo ""
-echo ""
-echo "  _____           __ _ _    _ _"
-echo " |_   _| __ __ _ / _(_) | _(_) |_ ___"
-echo "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
-echo "   | || | | (_| |  _| |   <| | || (_) |"
-echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
-echo ""
-echo ""
-echo "    Uninstalling Trafikito agent"
-echo ""
-echo ""
+ECHO=/bin/echo
+WHOAMI=`whoami`
+
+$ECHO ""
+$ECHO ""
+$ECHO "  _____           __ _ _    _ _"
+$ECHO " |_   _| __ __ _ / _(_) | _(_) |_ ___"
+$ECHO "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
+$ECHO "   | || | | (_| |  _| |   <| | || (_) |"
+$ECHO "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
+$ECHO ""
+$ECHO ""
+$ECHO "    Uninstalling Trafikito agent"
+$ECHO ""
+$ECHO ""
+$ECHO "This is 2 steps process:"
+$ECHO "1. Stop the agent"
+$ECHO "2. Delete the files"
+$ECHO ""
 
 BASEDIR="${0%/*}"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 while true; do
-    /bin/echo -n "Do you want to uninstall the Trafikto agent and remove $BASEDIR? (yes or no): "; read x
+    $ECHO -n "1/2: Do you want to STOP the Trafikto agent? (type 'yes' to continue): "; read x
     if [ "$x" = 'yes' ]; then
         break
     fi
-    echo "** Uninstall aborted!"
+    $ECHO "** Uninstall aborted!"
     exit 0
 done
-
-WHOAMI=`whoami`
 
 # remove systemd config
 if [ -f /etc/systemd/system/trafikito.service ]; then
     if [ $WHOAMI != 'root' ]; then
-        echo "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
-        echo "** Cannot continue!"
+        $ECHO "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
+        $ECHO "** Cannot continue!"
         exit 1
     fi
     systemctl disable trafikito
@@ -65,18 +70,27 @@ fi
 # remove upstart config
 if [ -f /etc/init/trafikito.conf ]; then
     if [ $WHOAMI != 'root' ]; then
-        echo "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
-        echo "** Cannot continue!"
+        $ECHO "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
+        $ECHO "** Cannot continue!"
         exit 1
     fi
     initctl stop trafikito 2>/dev/null
     rm /etc/init/trafikito.conf
 fi
 
+while true; do
+    $ECHO -n "2/2: Do you want to DELETE Trafikto agent files at $BASEDIR? (type 'yes' to continue): "; read x
+    if [ "$x" = 'yes' ]; then
+        break
+    fi
+    $ECHO "** Uninstall aborted!"
+    exit 0
+done
+
 # now remove everything in BASEDIR
 rm -rf "$BASEDIR"
 if [ $? -ne 0 ]; then
-    echo "** Removing $BASEDIR failed! Looks like you don't have write permission"
+    $ECHO "** Removing $BASEDIR failed! Looks like you don't have write permission"
 fi
 
-echo "Trafikito where successfully uninstalled"
+$ECHO "Trafikito where successfully uninstalled"

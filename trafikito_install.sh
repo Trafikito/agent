@@ -24,24 +24,25 @@
 #  * SUCH DAMAGE.
 #  */
 
-echo ""
-echo ""
-echo "  _____           __ _ _    _ _"
-echo " |_   _| __ __ _ / _(_) | _(_) |_ ___"
-echo "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
-echo "   | || | | (_| |  _| |   <| | || (_) |"
-echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
-echo ""
-echo ""
-echo "    Trafikito agent installation"
-echo ""
-echo ""
+ECHO=/bin/echo
+
+$ECHO ""
+$ECHO ""
+$ECHO "  _____           __ _ _    _ _"
+$ECHO " |_   _| __ __ _ / _(_) | _(_) |_ ___"
+$ECHO "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
+$ECHO "   | || | | (_| |  _| |   <| | || (_) |"
+$ECHO "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
+$ECHO ""
+$ECHO ""
+$ECHO "    Trafikito agent installation"
+$ECHO ""
+$ECHO ""
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 export URL="https://ap-southeast-1.api.trafikito.com"
 
-ECHO=/bin/echo
 fn_prompt() {
     default=$1
     mesg=$2
@@ -71,37 +72,37 @@ fn_prompt() {
 
 usage() {
     (
-    echo
-    echo "Usage: sh $0 --user_api_key=<api_key> --workspace_id=<workspace_id> [--servername=<servername>]"
-    echo
-    echo "To install Trafikito agent you need to get server api key, workspace id, and (optional)"
-    echo "default name."
-    echo
-    echo "To get all the details please follow these steps:"
-    echo "  1. Visit https://trafikito.com/servers"
-    echo "  2. Find your server on servers list or add new one"
-    echo "  3. Click 3 dots button to open menu and select: How to install?"
-    echo "  4. Use this command (replace <user_api_key> and <server_id> with correct values):"
-    echo "     sh $0 --user_api_key=<user_api_key> --workspace_id=<workspace_id> [--hostnae=<default name>]"
+    $ECHO
+    $ECHO "Usage: sh $0 --user_api_key=<api_key> --workspace_id=<workspace_id> [--servername=<servername>]"
+    $ECHO
+    $ECHO "To install Trafikito agent you need to get server api key, workspace id, and (optional)"
+    $ECHO "default name."
+    $ECHO
+    $ECHO "To get all the details please follow these steps:"
+    $ECHO "  1. Visit https://trafikito.com/servers"
+    $ECHO "  2. Find your server on servers list or add new one"
+    $ECHO "  3. Click 3 dots button to open menu and select: How to install?"
+    $ECHO "  4. Use this command (replace <user_api_key> and <server_id> with correct values):"
+    $ECHO "     sh $0 --user_api_key=<user_api_key> --workspace_id=<workspace_id> [--hostnae=<default name>]"
     ) 1>&2
     exit 1
 }
 
 # parse arguments
 for x in $*; do
-    option=`echo "$x" | sed -e 's#=.*##'`
-    arg=`echo "$x" | sed -e 's#.*=##'`
+    option=`$ECHO "$x" | sed -e 's#=.*##'`
+    arg=`$ECHO "$x" | sed -e 's#.*=##'`
     case "$option" in
         --user_api_key) USER_API_KEY="$arg" ;;
         --workspace_id) WORKSPACE_ID="$arg" ;;
         --servername)   SERVER_NAME="$arg" ;;
-        *) echo "Bad option '$option'" 1>&2
+        *) $ECHO "Bad option '$option'" 1>&2
            usage
     esac
 done
 
-test -z "$USER_API_KEY" && echo "Option '--user_api_key' with an argument is required" 1>&2 && usage
-test -z "$WORKSPACE_ID" && echo "Option '--workspace_id' with an argument is required" 1>&2 && usage
+test -z "$USER_API_KEY" && $ECHO "Option '--user_api_key' with an argument is required" 1>&2 && usage
+test -z "$WORKSPACE_ID" && $ECHO "Option '--workspace_id' with an argument is required" 1>&2 && usage
 if [ -z "$SERVER_NAME" ]; then
     SERVER_NAME=`hostname -f`
     "$ECHO" -n "Name this Trafikito instance [${SERVER_NAME}]: "; read x
@@ -114,12 +115,12 @@ fi
 RUNAS="nobody"
 WHOAMI=`whoami`
 if [ "$WHOAMI" != "root" ]; then
-    echo "If possible, run installation as root user."
-    echo "Root user is used to make script running as 'nobody' which improves security."
-    echo "To install as root either log in as root and execute the script or use:"
-    echo
-    echo "  sudo sh $0"
-    echo
+    $ECHO "If possible, run installation as root user."
+    $ECHO "Root user is used to make script running as 'nobody' which improves security."
+    $ECHO "To install as root either log in as root and execute the script or use:"
+    $ECHO
+    $ECHO "  sudo sh $0"
+    $ECHO
     fn_prompt "N" "Continue as $WHOAMI [yN]: " || exit 1
     RUNAS="$WHOAMI"
 fi
@@ -129,10 +130,10 @@ export BASEDIR="/opt/trafikito"
 while true; do
     fn_prompt "Y" "Going to install Trafikito in $BASEDIR [Yn]: "
     if [ $? -eq 0 ]; then
-        echo -n "  Enter directory for installation: "; read BASEDIR
-        echo $BASEDIR | grep -q '^\/'
+        $ECHO -n "  Enter directory for installation: "; read BASEDIR
+        $ECHO $BASEDIR | grep -q '^\/'
         if [ $? -ne 0 ]; then
-            echo "Directory for installation must be an absolute path"
+            $ECHO "Directory for installation must be an absolute path"
             BASEDIR="/opt/trafikito"
         fi
         continue
@@ -142,7 +143,7 @@ while true; do
         if [ $? -eq 1 ]; then
             reason=`rm -rf $BASEDIR 2>&1`
             if [ $? -ne 0 ]; then
-                echo "  Remove failed: $reason - please try again"
+                $ECHO "  Remove failed: $reason - please try again"
                 continue
             fi
         else
@@ -167,11 +168,11 @@ mkdir -p $BASEDIR/var
 # build config and source it
 CONFIG=$BASEDIR/etc/trafikito.cfg
 (
-echo export RUNAS=\"$RUNAS\"
-echo export USER_API_KEY=\"$USER_API_KEY\"
-echo export WORKSPACE_ID=\"$WORKSPACE_ID\"
-echo export SERVER_NAME=\"$SERVER_NAME\"
-echo export TMP_FILE=\"$BASEDIR/var/trafikito.tmp\"
+$ECHO export RUNAS=\"$RUNAS\"
+$ECHO export USER_API_KEY=\"$USER_API_KEY\"
+$ECHO export WORKSPACE_ID=\"$WORKSPACE_ID\"
+$ECHO export SERVER_NAME=\"$SERVER_NAME\"
+$ECHO export TMP_FILE=\"$BASEDIR/var/trafikito.tmp\"
 ) >$CONFIG
 
 . $CONFIG
@@ -181,19 +182,19 @@ fn_install_tool() {
     tool=$1
     help=$2
     pkg=$tool  # in case $tool is in a package
-    echo -n "  $tool - $help: "
+    $ECHO -n "  $tool - $help: "
 
     # check if command is installed
     x=`which $tool`
     if [ -z "$x" ]; then
-        echo "not found - going to install it"
+        $ECHO "not found - going to install it"
     else
-        echo "found $x"
+        $ECHO "found $x"
         return 0
     fi
 
     if [ "$WHOAMI" != 'root' ]; then
-        echo -n "  Need root privilege to install '$pkg': please install it manually [enter]: "; read x
+        $ECHO -n "  Need root privilege to install '$pkg': please install it manually [enter]: "; read x
         return
     fi
 
@@ -208,28 +209,28 @@ fn_install_tool() {
     elif [ -x /sbin/apk ]; then # alpine
         /sbin/apk --no-cache add "$pkg"
     else
-        echo "  ERROR: this system's package manager is not supported"
-        echo "    Please contact Trafikito support for help"  # TODO
+        $ECHO "  ERROR: this system's package manager is not supported"
+        $ECHO "    Please contact Trafikito support for help"  # TODO
         return 1
     fi
     if [ $? ]; then
-        echo "  Something went wrong: please contact Trafikito support for help"  # TODO
+        $ECHO "  Something went wrong: please contact Trafikito support for help"  # TODO
         return 1
     else
-        echo "  installed `which $tool`"
+        $ECHO "  installed `which $tool`"
         return 0
     fi
 }
 
 # install curl
-echo -n "Checking for curl..."
+$ECHO -n "Checking for curl..."
 fn_install_tool "curl" "transfer an url"
 if [ $? -ne 0 ]; then
-    echo "  Looks like your distro does not have curl: please contact trafikito support"
+    $ECHO "  Looks like your distro does not have curl: please contact trafikito support"
     exit 1
 fi
 
-echo "* Looking for required commands..."
+$ECHO "* Looking for required commands..."
 fn_install_tool "df"     "report file system disk space usage"
 fn_install_tool "free"   "report amount of free and used memory in the system"
 fn_install_tool "egrep"  "print lines matching a pattern"
@@ -241,93 +242,93 @@ fn_install_tool "top"    "display processes"
 fn_install_tool "uptime" "tell how long the system has been running"
 fn_install_tool "vmstat" "report virtual memory statistics"
 
-echo ""
-echo "* Installing agent..."
+$ECHO ""
+$ECHO "* Installing agent..."
 
 fn_download ()
 {
     # for development
     if [ `hostname` = 'tui' ]; then
-        echo "http://tui.home/trafikito/$1"
+        $ECHO "http://tui.home/trafikito/$1"
     else
-        echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+        $ECHO "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
     fi
 }
 
-echo "*** Starting to download agent files"
+$ECHO "*** Starting to download agent files"
 file=$BASEDIR/trafikito
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download trafikito` > /dev/null
 if [ ! -f "$file" ]; then
-    echo "*** 1/5 Failed to download. Retrying."
+    $ECHO "*** 1/5 Failed to download. Retrying."
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download trafikito` > /dev/null
     if [ ! -f "$file" ]; then
-        echo "*** 1/5 Failed to download: $file"
+        $ECHO "*** 1/5 Failed to download: $file"
         exit 1;
     fi
 else
-    echo "*** 1/5 done"
+    $ECHO "*** 1/5 done"
 fi
 
 file=$BASEDIR/uninstall.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download uninstall.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    echo "*** 2/5 Failed to download. Retrying."
+    $ECHO "*** 2/5 Failed to download. Retrying."
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download uninstall.sh` > /dev/null
     if [ ! -f "$file" ]; then
-        echo "*** 2/5 Failed to download: $file"
+        $ECHO "*** 2/5 Failed to download: $file"
         exit 1;
     fi
 else
-    echo "*** 2/5 done"
+    $ECHO "*** 2/5 done"
 fi
 
 file=$BASEDIR/lib/trafikito_wrapper.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    echo "*** 3/5 Failed to download. Retrying."
+    $ECHO "*** 3/5 Failed to download. Retrying."
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/trafikito_wrapper.sh` > /dev/null
     if [ ! -f "$file" ]; then
-        echo "*** 3/5 Failed to download: $file"
+        $ECHO "*** 3/5 Failed to download: $file"
         exit 1;
     fi
 else
-    echo "*** 3/5 done"
+    $ECHO "*** 3/5 done"
 fi
 
 file=$BASEDIR/lib/trafikito_agent.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    echo "*** 4/5 Failed to download. Retrying."
+    $ECHO "*** 4/5 Failed to download. Retrying."
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/trafikito_agent.sh` > /dev/null
     if [ ! -f "$file" ]; then
-        echo "*** 4/5 Failed to download: $file"
+        $ECHO "*** 4/5 Failed to download: $file"
         exit 1;
     fi
 else
-    echo "*** 4/5 done"
+    $ECHO "*** 4/5 done"
 fi
 
 file=$BASEDIR/lib/set_os.sh
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$file" `fn_download lib/set_os.sh` > /dev/null
 if [ ! -f "$file" ]; then
-    echo "*** 5/5 Failed to download. Retrying."
+    $ECHO "*** 5/5 Failed to download. Retrying."
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$file" `fn_download lib/set_os.sh` > /dev/null
     if [ ! -f "$file" ]; then
-        echo "*** 5/5 Failed to download: $file"
+        $ECHO "*** 5/5 Failed to download: $file"
         exit 1;
     fi
 else
-    echo "*** 5/5 done"
+    $ECHO "*** 5/5 done"
 fi
 
-echo
+$ECHO
 chmod +x $BASEDIR/trafikito $BASEDIR/uninstall.sh $BASEDIR/lib/*
 
 # get os facts
 . $BASEDIR/lib/set_os.sh
 fn_set_os
 
-echo "* Create server and get config file"
+$ECHO "* Create server and get config file"
 curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_agent_file?file=trafikito.conf \
     -H 'Cache-Control: no-cache' \
     -H 'Content-Type: application/json' \
@@ -348,10 +349,10 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
 
 export SERVER_ID=`grep server_id $TMP_FILE | sed -e 's/.*= //'`
 export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
-echo export SERVER_ID=$SERVER_ID >>$CONFIG
-echo export API_KEY=$API_KEY     >>$CONFIG
+$ECHO export SERVER_ID=$SERVER_ID >>$CONFIG
+$ECHO export API_KEY=$API_KEY     >>$CONFIG
 
-echo "* Generating initial settings"
+$ECHO "* Generating initial settings"
 >$TMP_FILE
 (
 cat <<STOP
@@ -372,13 +373,13 @@ trafikito_vmstat_s="vmstat -s"
 trafikito_top="top -bcn1"
 STOP
 ) | while read line; do
-    command=`echo "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
-    echo "  executing $command..."
-    echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
+    command=`$ECHO "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
+    $ECHO "  executing $command..."
+    $ECHO "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
     eval "$command" >>$TMP_FILE 2>&1
 done
 
-echo "* Getting available commands file & setting default dashboard"
+$ECHO "* Getting available commands file & setting default dashboard"
 curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url    "$URL/v2/agent/get_agent_file?file=available_commands.sh" \
      --header "content-type: multipart/form-data" \
@@ -397,17 +398,17 @@ chown -R "$RUNAS" $BASEDIR
 
 # configure restart
 if [ "$WHOAMI" != "root" ]; then
-    echo "Script was not installed as root: cannot configure startup"
-    echo "You can control the script manually with:"
-    echo
-    echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    $ECHO "Script was not installed as root: cannot configure startup"
+    $ECHO "You can control the script manually with:"
+    $ECHO
+    $ECHO "  $BASEDIR/trafikito {start|stop|restart|status}"
     exit 0
 fi
 
 # systemd: test for useable systemctl
 x=`which systemctl`
 if [ $? -eq 0 ]; then
-    echo "You are running systemd..."
+    $ECHO "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
         # silently stop and remove systemd config
@@ -415,16 +416,16 @@ if [ $? -eq 0 ]; then
         systemctl disable trafikito 2>/dev/null
         rm /etc/systemd/system/trafikito.service 2>/dev/null
         (
-        echo "[Unit]"
-        echo "Description=Trafikito Agent"
-        echo "After=network.target"
-        echo "[Service]"
-        echo "Type=simple"
-        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
-        echo "User=nobody"
-        echo "Group=nogroup"
-        echo "[Install]"
-        echo "WantedBy=multi-user.target"
+        $ECHO "[Unit]"
+        $ECHO "Description=Trafikito Agent"
+        $ECHO "After=network.target"
+        $ECHO "[Service]"
+        $ECHO "Type=simple"
+        $ECHO "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
+        $ECHO "User=nobody"
+        $ECHO "Group=nogroup"
+        $ECHO "[Install]"
+        $ECHO "WantedBy=multi-user.target"
         ) >/etc/systemd/system/trafikito.service
         systemctl enable trafikito
         systemctl start trafikito
@@ -432,18 +433,18 @@ if [ $? -eq 0 ]; then
         exit 0
     fi
 else
-    echo "Was not able to install with systemd, trying to install with upstart..."
+    $ECHO "Was not able to install with systemd, trying to install with upstart..."
     fn_prompt "Y" "Shall I configure, enable and start the agent with upstart? [Yn]: "
     if [ $? -eq 1 ]; then
         # silently stop and remove systemd config
         initctl stop trafikito 2>/dev/null
         rm /etc/init/trafikito.conf 2>/dev/null
         (
-        echo "description \"Trafikito Agent\""
-        echo "start on runlevel [2345]"
-        echo "stop on runlevel [!2345]"
-        echo "respawn"
-        echo "exec $BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
+        $ECHO "description \"Trafikito Agent\""
+        $ECHO "start on runlevel [2345]"
+        $ECHO "stop on runlevel [!2345]"
+        $ECHO "respawn"
+        $ECHO "exec $BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
         ) >/etc/init/trafikito.conf
         initctl reload-configuration
         sleep 2
