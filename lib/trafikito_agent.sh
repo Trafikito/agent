@@ -42,7 +42,7 @@ DEBUG=1
 
 
 # agent version: will be compared as a string
-export AGENT_VERSION=15
+export AGENT_VERSION=17
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
@@ -54,6 +54,8 @@ if [ -f $LOGFILE ]; then
     cp $LOGFILE $LOGFILE.bak
     tail -n 1000 $LOGFILE.bak >$LOGFILE
 fi
+
+LAST_CONFIG=$BASEDIR/var/last_config.tmp
 
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1
@@ -85,24 +87,28 @@ fn_debug() {
 #   $COMMANDS_TO_RUN: commands to execute from Trafikito
 #   $AGENT_NEW_VERSION: current_agent_version for dynamic updates
 #   $CYCLE_DELAY: seconds to delay this cycle
-#   $TIME_INTERVAL: run interval
 #   $WIDGETS: , delimited list of widgets to install
 # returns:
 #   0 success
 #   1 error and log error
 ##########################################################
 fn_get_config() {
+    fn_debug "Previous hash: $CALL_TOKEN"
+
     data=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
                --url     "$URL/v2/agent/get_config" \
                --header  "Content-Type: application/json" \
-               --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\" }"
-        `
+               --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\", \"previous\": \"$CALL_TOKEN\" }" `
     # check for curl error
     if [ $? -ne 0 ]; then
         fn_log "curl returned curl error code $?: cannot complete run"
         return 1
     fi
     # check for trafikito error
+    if [ -z "$data" ]; then
+        fn_log "curl returned no data: cannot complete run"
+        return 1
+    fi
     echo "$data" | grep -q error
     if [ $? -eq 0 ]; then
         # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED","env":"production"},"data":null}
@@ -111,21 +117,33 @@ fn_get_config() {
         return 1
     fi
 
+    fn_debug "Got data: $data"
+
+    # server removed from UI or other reason to stop?
+    # create $BASEDIR/var/STOP because this user may not have super user access
+    case $data in STOP*)
+        fn_log "Stopping the agent. Reason: $data"
+        echo $data >$BASEDIR/var/STOP
+        exit 1
+    esac
+
+    case $data in =)
+        if [ -f $LAST_CONFIG ]; then
+            data=`cat $LAST_CONFIG`
+        fi
+        fn_debug "Using config from cache"
+    esac
+
+    fn_debug "Saving config to cache file"
+    echo $data >$LAST_CONFIG
+
     # parse data
     set $data
     CALL_TOKEN=$1
     COMMANDS_TO_RUN=`echo $2 | sed -e 's/,/ /g'`
     AGENT_NEW_VERSION=$3
     CYCLE_DELAY=$4
-    TIME_INTERVAL=$5
-    WIDGETS=`echo $6 | sed -e 's/,/ /g'`
-
-    fn_debug "    CALL_TOKEN $CALL_TOKEN"
-    fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
-    fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
-    fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
-    fn_debug "    TIME_INTERVAL $TIME_INTERVAL"
-    fn_debug "    WIDGETS $WIDGETS"
+    WIDGETS=`echo $5 | sed -e 's/,/ /g'`
 
     return 0
 }
@@ -207,21 +225,32 @@ fn_install_trafikito_widget() {
 # start of main
 ##################################################
 fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
-fn_log "agent run started"
+fn_log "Agent v${AGENT_VERSION} run started"
+
+if [ -f $BASEDIR/var/STOP ]; then
+    fn_log `cat $BASEDIR/var/STOP`
+    exit 1
+fi
 
 fn_set_os
 
 # get config from trafikito
 fn_get_config
+
+fn_debug "    CALL_TOKEN $CALL_TOKEN"
+fn_debug "    COMMANDS_TO_RUN $COMMANDS_TO_RUN"
+fn_debug "    AGENT_NEW_VERSION $AGENT_NEW_VERSION"
+fn_debug "    CYCLE_DELAY $CYCLE_DELAY"
+fn_debug "    WIDGETS $WIDGETS"
+
 if [ $? -ne 0 ]; then
     fn_log "Skipping this run"
     exit 1
 fi
 
-# save CYCLE_DELAY and TIME_INTERVAL for wrapper
+# save CYCLE_DELAY for wrapper
 #CYCLE_DELAY=2
 echo $CYCLE_DELAY   >$BASEDIR/var/cycle_delay.tmp
-echo $TIME_INTERVAL >$BASEDIR/var/time_interval.tmp
 
 # create new tmp file
 >$TMP_FILE
