@@ -130,18 +130,18 @@ export BASEDIR="/opt/trafikito"
 while true; do
     fn_prompt "Y" "Going to install Trafikito in $BASEDIR [Yn]: "
     if [ $? -eq 0 ]; then
-        echo -n "  Enter directory for installation: "; read BASEDIR
+        $ECHO -n "  Enter directory for installation: "; read BASEDIR
         # test for starting /
-        echo $BASEDIR | grep -q '^\/'
+        $ECHO $BASEDIR | grep -q '^\/'
         if [ $? -ne 0 ]; then
-            echo "    Directory for installation must be an absolute path!"
+            $ECHO "    Directory for installation must be an absolute path!"
             BASEDIR="/opt/trafikito"
             continue
         fi
         # test for spaces in path
-        echo $BASEDIR | grep -vq ' '
+        $ECHO $BASEDIR | grep -vq ' '
         if [ $? -ne 0 ]; then
-            echo "    Directory name for installation must not contain spaces!"
+            $ECHO "    Directory name for installation must not contain spaces!"
             BASEDIR="/opt/trafikito"
             continue
         fi
@@ -260,8 +260,8 @@ fn_download ()
 {
     # for development
     case `hostname -f` in
-        *home) echo "http://tui.home/trafikito/$1" ;;
-            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+        *home) $ECHO "http://tui.home/trafikito/$1" ;;
+            *) $ECHO "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
     esac
 }
 
@@ -440,7 +440,7 @@ STOP
  
         # WARNING: keep 8 space indent until STOP!
         cat << STOP | sed -e 's/        //' >$BASEDIR/lib/remove_startup.sh
-        echo "  Disabling systemd"
+        $ECHO "  Disabling systemd"
         systemctl stop trafikito
         systemctl disable trafikito
         rm -f /etc/systemd/system/trafikito.service
@@ -505,15 +505,15 @@ if [ $? -eq 0 ]; then
                 PID=\`pgrep -f "\$PIDLIST"\`
                 R=\$?
                 if [ \$R -eq 0 ]; then
-                    set \$PID; echo "Trafikito agent running (pid=\$*)"
+                    set \$PID; $ECHO "Trafikito agent running (pid=\$*)"
                 else
-                    echo "Trafikito agent stopped"
+                    $ECHO "Trafikito agent stopped"
                     tail /opt/trafikito/var/trafikito.log 2>/dev/null
                 fi
                 exit \$R
                 ;;
             *)
-                echo "Usage: /etc/init.d/trafikito {start|stop|restart|status}"
+                $ECHO "Usage: /etc/init.d/trafikito {start|stop|restart|status}"
                 exit 1
                 ;;
         esac
@@ -521,8 +521,8 @@ if [ $? -eq 0 ]; then
         exit 0
 STOP
 
-       echo "Removing System V startup"        >$BASEDIR/lib/remove_startup.sh
-       echo "update-rc.d -f trafikito remove" >>$BASEDIR/lib/remove_startup.sh
+       $ECHO "Removing System V startup"        >$BASEDIR/lib/remove_startup.sh
+       $ECHO "update-rc.d -f trafikito remove" >>$BASEDIR/lib/remove_startup.sh
 
         exit 0
     fi
