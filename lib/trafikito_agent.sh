@@ -60,9 +60,18 @@ LAST_CONFIG=$BASEDIR/var/last_config.tmp
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
-# source available commands
+# source only valid available commands: this is the right place to it
+# widget errors from last run will be caught here
 # TODO sanitize the file and check if format is correct if not - send to Trafikito API error which will be delivered to client
-. $BASEDIR/available_commands.sh || exit 1
+# see TODO ERROR FEEDBACK below
+RegexpCMD='^[[:space:]]+[[:digit:]]+[[:space:]]+trafikito_[[:lower:]_]+="[^"]+"[[:space:]]*$' # command line
+RegexpCMT='^[[:space:]]+[[:digit:]]+[[:space:]]+#'   # comments (leading space okay)
+RegexpSPC='^[[:space:]]+[[:digit:]]+[[:space:]]+$'   # blank lines
+RegexpVAL="$RegexpCMD|$RegexpCMT|$RegexpSPC"         # valid lines used later for error feedback
+# valid commands into $TMP_FILE and source it
+nl -ba $BASEDIR/available_commands.sh | egrep $RegexpCMD | sed -e 's/^ *[0-9]* *//' >$TMP_FILE;
+cat $TMP_FILE
+. $TMP_FILE
 
 # source function to set os facts || exit 1
 . $BASEDIR/lib/set_os.sh
@@ -78,6 +87,16 @@ fn_log() {
 fn_debug() {
     if [ "$DEBUG" ]; then
         fn_log "DEBUG $*"
+    fi
+}
+
+# check for curl exit code != 0
+fn_check_curl_error() {
+    result=$1
+    where=$2
+    if [ "$result" != "0" ]; then
+        fn_log "** ERROR: curl returned curl error code $result $where: cannot complete run"
+        exit 1  # okay here, but don't do it in wrapper
     fi
 }
 
@@ -100,10 +119,7 @@ fn_get_config() {
                --header  "Content-Type: application/json" \
                --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\", \"previous\": \"$CALL_TOKEN\" }" `
     # check for curl error
-    if [ $? -ne 0 ]; then
-        fn_log "curl returned curl error code $?: cannot complete run"
-        return 1
-    fi
+    fn_check_curl_error $? 'getting config'
     # check for trafikito error
     if [ -z "$data" ]; then
         fn_log "curl returned no data: cannot complete run"
@@ -186,17 +202,22 @@ fn_upgrade()
 {
     fn_debug "*** Starting to download agent files"
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
+    fn_check_curl_error $? "downloading trafikito"
     fn_debug "*** 1/5 done"
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
+    fn_check_curl_error $? "downloading uninstall"
     fn_debug "*** 2/5 done"
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+    fn_check_curl_error $? "downloading wrapper"
     fn_debug "*** 3/5 done"
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
+    fn_check_curl_error $? "downloading agent"
     fn_debug "*** 4/5 done"
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
+    fn_check_curl_error $? "downloading set_os"
     fn_debug "*** 5/5 done"
 
-    chmod +x $BASEDIR/trafikito $BASEDIR/lib/*
+    chmod +x $BASEDIR/trafikito $BASEDIR/uninstall.sh $BASEDIR/lib/*
 }
 
 ##########################
@@ -208,17 +229,18 @@ fn_install_trafikito_widget() {
     data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
                --url     "$URL/v2/widget/get-command" \
                --header  "Content-Type: application/json" \
-               --data "{ \"widgetId\": \"$WIDGET_ID\" }"
-        `
+               --data "{ \"widgetId\": \"$WIDGET_ID\" }"`
+    fn_check_curl_error $? "installing widget $WIDGET_ID"
 
+    # TODO do the rest only if $data is a valid command?
     echo $data >>$BASEDIR/available_commands.sh
     data=`echo $data | awk -F "=" '{print $1}'`
 
     data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
                --url     "$URL/v2/widget/install" \
                --header  "Content-Type: application/json" \
-               --data "{ \"serverApiKey\": \"$API_KEY\", \"serverId\": \"$SERVER_ID\", \"widgetId\": \"$WIDGET_ID\", \"cmd\": \"$data\" }"
-    `
+               --data "{ \"serverApiKey\": \"$API_KEY\", \"serverId\": \"$SERVER_ID\", \"widgetId\": \"$WIDGET_ID\", \"cmd\": \"$data\" }"`
+    fn_check_curl_error $? "confirming widget $WIDGET_ID installed"
 }
 
 ##################################################
@@ -273,7 +295,14 @@ done
 
 # collect available commands from available_commands.sh
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
-cat $BASEDIR/available_commands.sh | grep -v "#" >>$TMP_FILE
+nl -ba $BASEDIR/available_commands.sh | egrep $RegexpCMD | sed -e 's/^ *[0-9]* *//' >$TMP_FILE;
+
+# TODO ERROR FEEDBACK
+# error feedback
+#echo "*-*-*-*------------ Command errors:" >>$TMP_FILE
+#nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpVAL >>$TMP_FILE;
+fn_debug "*-*-*-*------------ Command errors:"
+fn_debug `nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpVAL`
 
 TIME_TOOK_LAST_TIME=0
 if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
@@ -285,12 +314,8 @@ saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30
      --form    output=@$TMP_FILE \
      --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
      --form    serverId=$SERVER_ID \
-     --form    serverApiKey=$API_KEY
-     `
-
-if [ $? -ne 0 ]; then
-    fn_log "**ERROR: data sending failed: curl error code $?"
-fi
+     --form    serverApiKey=$API_KEY`
+    fn_check_curl_error $? "saving result"
 fn_log "Save result: $saveResult"
 fn_debug "DONE!"
 
