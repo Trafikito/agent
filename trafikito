@@ -5,7 +5,6 @@ export BASEDIR="${0%/*}"
 # source config file
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
-
 export AGENTNAME="trafikito_wrapper.sh"
 
 usage() {
@@ -13,15 +12,13 @@ usage() {
 }
 
 # Get status of an agent server_id
-# Parameters:
-#    server_id
 # Returns:
 #    0 = running normally
 #    1 = not running
 # Sets:
 #    $PID
 getstatus() {
-    PID=`pgrep -f "$AGENTNAME $1"`
+    PID=`pgrep -f "$AGENTNAME $SERVER_ID"`
     return $?
 }
 
@@ -29,44 +26,50 @@ getstatus() {
 # Parameters:
 #    server_id
 start() {
-    getstatus $1
+    getstatus
     if [ $? -eq 0 ]; then
-        echo "Trafikito agent already running" 1>&2
+        set $PID; echo "Trafikito agent already running (pid=$*)" 1>&2
         return
     fi
-    if [ "$RUNAS" = 'nobody' ]; then
-        echo "su -s /bin/sh -c $BASEDIR/lib/$AGENTNAME $1 $BASEDIR nobody "
-        su -s /bin/sh -c $BASEDIR/lib/$AGENTNAME $1 $BASEDIR nobody &
+    if [ $RUNAS = 'nobody' ]; then
+        sudo -u nobody $BASEDIR/lib/$AGENTNAME $SERVER_ID $BASEDIR &
     else
-        $BASEDIR/lib/$AGENTNAME $1 $BASEDIR &
+        $BASEDIR/lib/$AGENTNAME $SERVER_ID $BASEDIR &
     fi
-    status $1
+    # give agent time to start
+    sleep 1
+    status
 }
 
 # Stop an agent server_id
 # Parameters:
 #    server_id
 stop() {
-    getstatus $1
+    getstatus
     if [ $? -ne 0 ]; then
-        echo "Trafikito agent not running" 1>&2
+        echo "Trafikito agent stopped" 1>&2
         return
     fi
-    kill -9 "$PID"
-    status $1
+    kill -9 $PID
+    status
 }
 
 # Show status for an agent server_id
 status() {
-    getstatus $1
+    getstatus
     case $? in
-        0) echo "Trafikito agent running (pid=$pid)" 1>&2 ;;
-        1) echo "Trafikito agent not running" 1>&2 ;;
+        0) set $PID
+           echo "Trafikito agent running (pid=$*)" 1>&2
+           ;;
+        1) echo "Trafikito agent stopped" 1>&2
+           echo 1>&2
+           tail $BASEDIR/var/trafikito.log 2>/dev/null
+           ;;
     esac
 }
 
 # need root
-if [ "$RUNAS" = "nobody" ] && [ `whoami` != "root" ]; then
+if [ $RUNAS = "nobody" ] && [ `whoami` != "root" ]; then
     echo "You must be root to control the Trafikito agent running as the user '$RUNAS'"
     exit 1
 fi
@@ -75,10 +78,10 @@ if [ $# -ne 1 ]; then
     usage
 fi
 
-case "$1" in
-    start)   start  $SERVER_ID   ;;
-    stop)    stop   $SERVER_ID    ;;
-    restart) stop   $SERVER_ID; start $SERVER_ID ;;
-    status)  status $SERVER_ID  ;;
+case $1 in
+    start)   start  ;;
+    stop)    stop   ;;
+    restart) stop; start ;;
+    status)  status  ;;
     *) usage
 esac

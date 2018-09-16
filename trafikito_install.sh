@@ -130,17 +130,28 @@ export BASEDIR="/opt/trafikito"
 while true; do
     fn_prompt "Y" "Going to install Trafikito in $BASEDIR [Yn]: "
     if [ $? -eq 0 ]; then
-        $ECHO -n "  Enter directory for installation: "; read BASEDIR
-        $ECHO $BASEDIR | grep -q '^\/'
+        echo -n "  Enter directory for installation: "; read BASEDIR
+        # test for starting /
+        echo $BASEDIR | grep -q '^\/'
         if [ $? -ne 0 ]; then
-            $ECHO "Directory for installation must be an absolute path"
+            echo "    Directory for installation must be an absolute path!"
             BASEDIR="/opt/trafikito"
+            continue
         fi
-        continue
+        # test for spaces in path
+        echo $BASEDIR | grep -vq ' '
+        if [ $? -ne 0 ]; then
+            echo "    Directory name for installation must not contain spaces!"
+            BASEDIR="/opt/trafikito"
+            continue
+        fi
     fi
     if [ -d $BASEDIR ]; then
         fn_prompt "Y" "  Found existing $BASEDIR: okay to remove it? [Yn]: "
         if [ $? -eq 1 ]; then
+            if [ -f $BASEDIR/lib/remove_startup.sh ]; then
+                . $BASEDIR/lib/remove_startup.sh
+            fi
             reason=`rm -rf $BASEDIR 2>&1`
             if [ $? -ne 0 ]; then
                 $ECHO "  Remove failed: $reason - please try again"
@@ -248,11 +259,10 @@ $ECHO "* Installing agent..."
 fn_download ()
 {
     # for development
-    if [ `hostname` = 'tui' ]; then
-        $ECHO "http://tui.home/trafikito/$1"
-    else
-        $ECHO "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
-    fi
+    case `hostname -f` in
+        *home) echo "http://tui.home/trafikito/$1" ;;
+            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+    esac
 }
 
 $ECHO "*** Starting to download agent files"
@@ -338,14 +348,14 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
         \"serverName\": \"$SERVER_NAME\", \
         \"tmpFilePath\": \"$TMP_FILE\" \
         }" >$TMP_FILE
-# LUKAS: The only stuff I need from this is the serverid and api_key as follows
+
+# TODO LUKAS: The only stuff I need from this is the serverid and api_key as follows
 # (the config file has moved to $TRAFIKITO/etc/trafikito.conf)
 # SERVER_ID="jhgfhjgff"
 # API_KEY="jhgfhjgff"
 # capitals because that is standard for global variables in shell
 # no spaces before or after '=' and value protected with "..." (in case you allow an '=' to be part of the server id)
 # will the Trafikito API URLs change? If not we don't need it
-
 
 export SERVER_ID=`grep server_id $TMP_FILE | sed -e 's/.*= //'`
 export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
@@ -405,50 +415,115 @@ if [ "$WHOAMI" != "root" ]; then
     exit 0
 fi
 
+#####################################
 # systemd: test for useable systemctl
+#####################################
 x=`which systemctl`
 if [ $? -eq 0 ]; then
     $ECHO "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
-        # silently stop and remove systemd config
-        systemctl stop trafikito 2>/dev/null
-        systemctl disable trafikito 2>/dev/null
-        rm /etc/systemd/system/trafikito.service 2>/dev/null
-        (
-        $ECHO "[Unit]"
-        $ECHO "Description=Trafikito Agent"
-        $ECHO "After=network.target"
-        $ECHO "[Service]"
-        $ECHO "Type=simple"
-        $ECHO "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
-        $ECHO "User=nobody"
-        $ECHO "Group=nogroup"
-        $ECHO "[Install]"
-        $ECHO "WantedBy=multi-user.target"
-        ) >/etc/systemd/system/trafikito.service
-        systemctl enable trafikito
-        systemctl start trafikito
-        systemctl status trafikito
+
+        # WARNING: keep 8 space indent until STOP!
+        cat << STOP | sed -e 's/^        //' >/etc/systemd/system/trafikito.service
+        [Unit]
+        Description=Trafikito Agent
+        After=network.target
+        [Service]
+        Type=simple
+        ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR
+        User=nobody
+        Group=nogroup
+        [Install]
+        WantedBy=multi-user.target
+STOP
+ 
+        # WARNING: keep 8 space indent until STOP!
+        cat << STOP | sed -e 's/        //' >$BASEDIR/lib/remove_startup.sh
+        echo "  Disabling systemd"
+        systemctl stop trafikito
+        systemctl disable trafikito
+        rm -f /etc/systemd/system/trafikito.service
+STOP
+
+       systemctl enable trafikito
+       systemctl start trafikito
+       systemctl status trafikito
+
         exit 0
     fi
-else
-    $ECHO "Was not able to install with systemd, trying to install with upstart..."
-    fn_prompt "Y" "Shall I configure, enable and start the agent with upstart? [Yn]: "
+fi
+
+#################################################################
+# System V the Debian/Ubuntu flavour: test for usable update-rc.d
+#################################################################
+x=`which update-rc.d`
+if [ $? -eq 0 ]; then
+    echo "System V using update-rc.d is available on this server..."
+    fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
-        # silently stop and remove systemd config
-        initctl stop trafikito 2>/dev/null
-        rm /etc/init/trafikito.conf 2>/dev/null
-        (
-        $ECHO "description \"Trafikito Agent\""
-        $ECHO "start on runlevel [2345]"
-        $ECHO "stop on runlevel [!2345]"
-        $ECHO "respawn"
-        $ECHO "exec $BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
-        ) >/etc/init/trafikito.conf
-        initctl reload-configuration
-        sleep 2
-        initctl start trafikito
+
+    cat << STOP | sed -e 's/^        //' >/etc/init.d/trafikito
+        #!/bin/sh
+        ### BEGIN INIT INFO
+        # Provides:          trafikito
+        # Required-Start:    $local_fs $network
+        # Required-Stop:     $local_fs $network
+        # Should-Start:      $syslog
+        # Should-Stop:       $syslog
+        # Default-Start:     2 3 4 5
+        # Default-Stop:      0 1 6
+        # Short-Description: Starts or stops the trafikito agent
+        # Description:       Starts and stops the trafikito agent.
+        ### END INIT INFO
+
+        . /lib/lsb/init-functions
+
+        PIDLIST="trafikito_wrapper.sh $SERVER_ID"
+
+        case "\$1" in
+            start)
+                log_daemon_msg "Starting trafikito"
+                start-stop-daemon --start --quiet --background --chuid nobody --exec $BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR
+                log_end_msg \$?
+                ;;
+            stop)
+                log_daemon_msg "Stopping \$NAME"
+                PID=\`pgrep -f "\$PIDLIST"\`
+                if [ \$? -ne 0 ]; then
+                    log_failure_msg "Trafikito alread stopped"
+                else
+                    kill -9 \$PID
+                    log_end_msg \$?
+                fi
+                ;;
+            restart)
+                \$0 stop
+                \$0 start
+                ;;
+            status)
+                PID=\`pgrep -f "\$PIDLIST"\`
+                R=\$?
+                if [ \$R -eq 0 ]; then
+                    set \$PID; echo "Trafikito agent running (pid=\$*)"
+                else
+                    echo "Trafikito agent stopped"
+                    tail /opt/trafikito/var/trafikito.log 2>/dev/null
+                fi
+                exit \$R
+                ;;
+            *)
+                echo "Usage: /etc/init.d/trafikito {start|stop|restart|status}"
+                exit 1
+                ;;
+        esac
+
+        exit 0
+STOP
+
+       echo "Removing System V startup"        >$BASEDIR/lib/remove_startup.sh
+       echo "update-rc.d -f trafikito remove" >>$BASEDIR/lib/remove_startup.sh
+
         exit 0
     fi
 fi

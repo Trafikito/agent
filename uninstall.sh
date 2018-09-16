@@ -56,36 +56,12 @@ while true; do
     exit 0
 done
 
-# remove systemd config
-if [ -f /etc/systemd/system/trafikito.service ]; then
-    if [ $WHOAMI != 'root' ]; then
-        $ECHO "The Trafikito agent is controlled by systemd: you need to be root to disable and remove the configuration";
-        $ECHO "** Cannot continue!"
-        exit 1
-    fi
-    systemctl disable trafikito
-    rm /etc/systemd/system/trafikito.service
-fi
+WHOAMI=`whoami`
 
-# remove upstart config
-if [ -f /etc/init/trafikito.conf ]; then
-    if [ $WHOAMI != 'root' ]; then
-        $ECHO "The Trafikito agent is controlled by upstart: you need to be root to disable and remove the configuration";
-        $ECHO "** Cannot continue!"
-        exit 1
-    fi
-    initctl stop trafikito 2>/dev/null
-    rm /etc/init/trafikito.conf
+# remove startup config
+if [ -f $BASEDIR/lib/remove_startup.sh ]; then
+    . $BASEDIR/lib/remove_startup.sh
 fi
-
-while true; do
-    $ECHO -n "2/2: Do you want to DELETE Trafikto agent files at $BASEDIR? (type 'yes' to continue): "; read x
-    if [ "$x" = 'yes' ]; then
-        break
-    fi
-    $ECHO "** Uninstall aborted!"
-    exit 0
-done
 
 # now remove everything in BASEDIR
 rm -rf "$BASEDIR"
