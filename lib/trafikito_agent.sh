@@ -60,17 +60,15 @@ LAST_CONFIG=$BASEDIR/var/last_config.tmp
 # source config
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
-# source only valid available commands: this is the right place to it
-# widget errors from last run will be caught here
-# TODO sanitize the file and check if format is correct if not - send to Trafikito API error which will be delivered to client
-# see TODO ERROR FEEDBACK below
-RegexpCMD='^[[:space:]]+[[:digit:]]+[[:space:]]+trafikito_[[:lower:]_]+="[^"]+"[[:space:]]*$' # command line
+# regexps for available_commands.sh checking
+RegexpCommand='^trafikito_[[:lower:]_]+="[^"]+"[[:space:]]*$' # command line without line number
+
 RegexpCMT='^[[:space:]]+[[:digit:]]+[[:space:]]+#'   # comments (leading space okay)
 RegexpSPC='^[[:space:]]+[[:digit:]]+[[:space:]]+$'   # blank lines
 RegexpVAL="$RegexpCMD|$RegexpCMT|$RegexpSPC"         # valid lines used later for error feedback
+
 # valid commands into $TMP_FILE and source it
-nl -ba $BASEDIR/available_commands.sh | egrep $RegexpCMD | sed -e 's/^ *[0-9]* *//' >$TMP_FILE;
-cat $TMP_FILE
+egrep $RegexpCommand $BASEDIR/available_commands.sh >$TMP_FILE;
 . $TMP_FILE
 
 # source function to set os facts || exit 1
@@ -98,6 +96,15 @@ fn_check_curl_error() {
         fn_log "** ERROR: curl returned curl error code $result $where: cannot complete run"
         exit 1  # okay here, but don't do it in wrapper
     fi
+}
+
+###############################################
+# function to log and send an error to upstream
+###############################################
+fn_send_error() {
+    message=$*
+    fn_log "** ERROR: $message"
+    # TODO sendit
 }
 
 ##########################################################
@@ -254,6 +261,13 @@ if [ -f $BASEDIR/var/STOP ]; then
     exit 1
 fi
 
+
+# send errors with line numbers to upstream
+nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpVAL >$TMP_FILE
+if [ -s $TMP_FILE ]; then
+    fn_send_error "in $BASEDIR/available_commands.sh" `cat $TMP_FILE`
+fi
+
 fn_set_os
 
 # get config from trafikito
@@ -295,14 +309,7 @@ done
 
 # collect available commands from available_commands.sh
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
-nl -ba $BASEDIR/available_commands.sh | egrep $RegexpCMD | sed -e 's/^ *[0-9]* *//' >$TMP_FILE;
-
-# TODO ERROR FEEDBACK
-# error feedback
-#echo "*-*-*-*------------ Command errors:" >>$TMP_FILE
-#nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpVAL >>$TMP_FILE;
-fn_debug "*-*-*-*------------ Command errors:"
-fn_debug `nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpVAL`
+egrep $RegexpCommand $BASEDIR/available_commands.sh >>$TMP_FILE;
 
 TIME_TOOK_LAST_TIME=0
 if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
@@ -325,8 +332,7 @@ echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp
 # test if need to upgrade/downgrade agent
 if [ "$AGENT_VERSION" != "$AGENT_NEW_VERSION" ]; then
     fn_log "Changing this agent (version $AGENT_VERSION) to version $AGENT_NEW_VERSION"
-    fn_debug AGENT NOT UPGRADED
-    #fn_upgrade
+    fn_upgrade
 fi
 
 fn_log "agent run complete";

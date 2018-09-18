@@ -196,7 +196,7 @@ fn_install_tool() {
     $ECHO -n "  $tool - $help: "
 
     # check if command is installed
-    x=`which $tool`
+    x=`which $tool 2>/dev/null`
     if [ -z "$x" ]; then
         $ECHO "not found - going to install it"
     else
@@ -418,7 +418,7 @@ fi
 #####################################
 # systemd: test for useable systemctl
 #####################################
-x=`which systemctl`
+x=`which systemctl 2>/dev/null`
 if [ $? -eq 0 ]; then
     $ECHO "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
@@ -457,7 +457,7 @@ fi
 #################################################################
 # System V the Debian/Ubuntu flavour: test for usable update-rc.d
 #################################################################
-x=`which update-rc.d`
+x=`which update-rc.d 2>/dev/null`
 if [ $? -eq 0 ]; then
     echo "System V using update-rc.d is available on this server..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
