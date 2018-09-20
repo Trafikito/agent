@@ -61,14 +61,23 @@ LAST_CONFIG=$BASEDIR/var/last_config.tmp
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
 # regexps for available_commands.sh checking
-RegexpCommand='^trafikito_[[:lower:]_]+="[^"]+"[[:space:]]*$' # command line without line number
+                                RegexpCommand='^trafikito_[a-zA-Z0-9_]+="[^"]+"[[:space:]]*$' # command line without line number
+RegexpCMD='^[[:space:]]+[[:digit:]]+[[:space:]]+trafikito_[a-zA-Z0-9_]+="[^"]+"[[:space:]]*$' # command line with line number
+RegexpCMT='^[[:space:]]+[[:digit:]]+[[:space:]]+#'        # comments with line number (leading space okay)
+RegexpSPC='^[[:space:]]+[[:digit:]]+[[:space:]]*$'        # blank lines with line number
+RegexpValid="$RegexpCMD|$RegexpCMT|$RegexpSPC"            # valid lines used later for error feedback
 
-RegexpCMT='^[[:space:]]+[[:digit:]]+[[:space:]]+#'   # comments (leading space okay)
-RegexpSPC='^[[:space:]]+[[:digit:]]+[[:space:]]+$'   # blank lines
-RegexpVAL="$RegexpCMD|$RegexpCMT|$RegexpSPC"         # valid lines used later for error feedback
+# keep these 2 close to regexp definitions :-)
+fn_valid_commands() {
+    egrep $RegexpCommand $BASEDIR/available_commands.sh
+}
+
+fn_invalid_commands() {
+    nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpValid
+}
 
 # valid commands into $TMP_FILE and source it
-egrep $RegexpCommand $BASEDIR/available_commands.sh >$TMP_FILE;
+fn_valid_commands >$TMP_FILE
 . $TMP_FILE
 
 # source function to set os facts || exit 1
@@ -98,13 +107,64 @@ fn_check_curl_error() {
     fi
 }
 
+##############################################################
+# function to convert a \n seperated string into a json array
+##############################################################
+fn_json()  {
+    errcode=$1
+    errfile=$2
+    shift
+    shift
+    message=$*
+    flag=0
+    echo -n '['
+    cat $errfile | while read x; do
+        if [ $flag -ne 0 ]; then
+            echo -n ','
+        fi
+        flag=1
+        # protect " and strip \r, leading and trailing wspace
+        token=`echo $x | sed -e 's/\r//' -e 's/"/\\\"/g'  -e 's/^ *//' -e 's/ *$//'`
+        echo -n \"$token\"
+    done
+    echo ']'
+}
+
 ###############################################
 # function to log and send an error to upstream
 ###############################################
 fn_send_error() {
+    errcode=$1
+    errfile=$2
+    shift
+    shift
     message=$*
+    json=`fn_json $errcode $errfile $message`
     fn_log "** ERROR: $message"
-    # TODO sendit
+    fn_log "   details: $json"
+    # test age of error
+    last=0
+    if [ -f "$BASEDIR/error.$errcode" ]; then
+        last=`cat $BASEDIR/error.$errcode`
+    fi
+    now=`date +%s`
+    age=$(( now - last ))
+    if [ $age -gt 86400 ]; then
+        fn_log "         reporting error to trafikito"
+        # TODO
+        ###############################################################################
+        #curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
+        #     --url     "$URL/v2/agent/error_feedback" \
+        #     --header  "Content-Type: application/json" \
+        #     --data "{ \"code\": \"$errcode\", \"message\": \"$message\", \"details\": \"$json\" }"
+        # check for curl error
+        #fn_check_curl_error $? 'sending error'
+        ###############################################################################
+        fn_log "         done"
+        echo $now >$BASEDIR/var/error-$errcode
+    else
+        fn_log "          not reported to trafikito"
+    fi
 }
 
 ##########################################################
@@ -239,7 +299,14 @@ fn_install_trafikito_widget() {
                --data "{ \"widgetId\": \"$WIDGET_ID\" }"`
     fn_check_curl_error $? "installing widget $WIDGET_ID"
 
-    # TODO do the rest only if $data is a valid command?
+    # check that we got a valid command
+    fn_invalid_command >$TMP_FILE
+    if [ -s $TMP_FILE ]; then
+        fn_send_error 102 $TMP_FILE 'error when installing widget'
+        return
+    fi
+
+    # add command
     echo $data >>$BASEDIR/available_commands.sh
     data=`echo $data | awk -F "=" '{print $1}'`
 
@@ -262,10 +329,10 @@ if [ -f $BASEDIR/var/STOP ]; then
 fi
 
 
-# send errors with line numbers to upstream
-nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpVAL >$TMP_FILE
+# send errors in available_commands.sh with line numbers to upstream
+fn_invalid_commands >$TMP_FILE
 if [ -s $TMP_FILE ]; then
-    fn_send_error "in $BASEDIR/available_commands.sh" `cat $TMP_FILE`
+    fn_send_error 100 $TMP_FILE "error in $BASEDIR/available_commands.sh"
 fi
 
 fn_set_os
@@ -309,7 +376,7 @@ done
 
 # collect available commands from available_commands.sh
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
-egrep $RegexpCommand $BASEDIR/available_commands.sh >>$TMP_FILE;
+fn_valid_commands >>$TMP_FILE;
 
 TIME_TOOK_LAST_TIME=0
 if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
@@ -322,8 +389,14 @@ saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30
      --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
      --form    serverId=$SERVER_ID \
      --form    serverApiKey=$API_KEY`
-    fn_check_curl_error $? "saving result"
-fn_log "Save result: $saveResult"
+fn_check_curl_error $? "saving result"
+if [ "$saveResult" = "OK" ]; then
+    fn_debug "saveResult: $saveResult"
+else
+    echo $saveResult >$TMP_FILE
+    fn_send_error 101 $TMP_FILE "error in saveResult"
+fi
+
 fn_debug "DONE!"
 
 END=$(date +%s)

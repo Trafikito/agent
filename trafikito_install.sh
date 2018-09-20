@@ -356,6 +356,13 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
 # capitals because that is standard for global variables in shell
 # no spaces before or after '=' and value protected with "..." (in case you allow an '=' to be part of the server id)
 # will the Trafikito API URLs change? If not we don't need it
+grep -q server_id $TMP_FILE
+if [ $? -ne 0 ]; then
+    cat $TMP_FILE
+    echo
+    echo "CANNOT COMPLETE INSTALLATION"
+    exit 1
+fi
 
 export SERVER_ID=`grep server_id $TMP_FILE | sed -e 's/.*= //'`
 export API_KEY=`grep api_key   $TMP_FILE | sed -e 's/.*= //'`
@@ -423,106 +430,91 @@ if [ $? -eq 0 ]; then
     $ECHO "You are running systemd..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
+        (
+        echo "[Unit]"
+        echo "Description=Trafikito Agent"
+        echo "After=network.target"
+        echo "[Service]"
+        echo "Type=simple"
+        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
+        echo "User=nobody"
+        echo "Group=nogroup"
+        echo "[Install]"
+        echo "WantedBy=multi-user.target"
+        ) >/etc/systemd/system/trafikito.service
+        ( 
+        echo "echo Disabling and removing systemd"
+        echo "systemctl stop trafikito"
+        echo "systemctl disable trafikito"
+        echo "rm -f /etc/systemd/system/trafikito.service"
+        ) >$BASEDIR/lib/remove_startup.sh
+        systemctl enable trafikito
+        systemctl start trafikito
+        systemctl status trafikito
 
-        # WARNING: keep 8 space indent until STOP!
-        cat << STOP | sed -e 's/^        //' >/etc/systemd/system/trafikito.service
-        [Unit]
-        Description=Trafikito Agent
-        After=network.target
-        [Service]
-        Type=simple
-        ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR
-        User=nobody
-        Group=nogroup
-        [Install]
-        WantedBy=multi-user.target
-STOP
- 
-        # WARNING: keep 8 space indent until STOP!
-        cat << STOP | sed -e 's/        //' >$BASEDIR/lib/remove_startup.sh
-        $ECHO "  Disabling systemd"
-        systemctl stop trafikito
-        systemctl disable trafikito
-        rm -f /etc/systemd/system/trafikito.service
-STOP
-
-       systemctl enable trafikito
-       systemctl start trafikito
-       systemctl status trafikito
+        # remove script to manually control trafikito
+        rm $BASEDIR/trafikito
 
         exit 0
     fi
 fi
 
 #################################################################
-# System V the Debian/Ubuntu flavour: test for usable update-rc.d
+# System V startup
 #################################################################
-x=`which update-rc.d 2>/dev/null`
-if [ $? -eq 0 ]; then
-    echo "System V using update-rc.d is available on this server..."
+control=`which update-rc.d 2>/dev/null`    # debian/ubuntu
+if [ $? -ne 0 ]; then
+    control=`which chkconfig 2>/dev/null`  # mostly everything else
+fi
+if [ ! -z "$control" ]; then
+    echo "System V using $control is available on this server..."
     fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
     if [ $? -eq 1 ]; then
+        (
+        echo "#!/bin/sh"
+        echo "#"
+        echo "# chkconfig: 345 56 50"
+        echo "#"
+        echo "### BEGIN INIT INFO"
+        echo "# Provides:          trafikito"
+        echo "# Required-Start:"
+        echo "# Required-Stop:"
+        echo "# Should-Start:"
+        echo "# Should-Stop:"
+        echo "# Default-Start:"
+        echo "# Default-Stop:"
+        echo "# Short-Description: Starts or stops the trafikito agent"
+        echo "# Description:       Starts and stops the trafikito agent"
+        echo "### END INIT INFO"
+        echo
+        # remove hash bang and redefine BASEDIR
+        grep -v '#!' $BASEDIR/trafikito | sed -e "s#export BASEDIR.*#export BASEDIR=$BASEDIR#"
+        ) >/etc/init.d/trafikito
+        chmod +x /etc/init.d/trafikito
 
-    cat << STOP | sed -e 's/^        //' >/etc/init.d/trafikito
-        #!/bin/sh
-        ### BEGIN INIT INFO
-        # Provides:          trafikito
-        # Required-Start:    $local_fs $network
-        # Required-Stop:     $local_fs $network
-        # Should-Start:      $syslog
-        # Should-Stop:       $syslog
-        # Default-Start:     2 3 4 5
-        # Default-Stop:      0 1 6
-        # Short-Description: Starts or stops the trafikito agent
-        # Description:       Starts and stops the trafikito agent.
-        ### END INIT INFO
-
-        . /lib/lsb/init-functions
-
-        PIDLIST="trafikito_wrapper.sh $SERVER_ID"
-
-        case "\$1" in
-            start)
-                log_daemon_msg "Starting trafikito"
-                start-stop-daemon --start --quiet --background --chuid nobody --exec $BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR
-                log_end_msg \$?
+        case $control in
+            *update-rc.d)
+                echo "echo Removing System V startup"   >$BASEDIR/lib/remove_startup.sh
+                echo "service trafikito stop"          >>$BASEDIR/lib/remove_startup.sh
+                echo "update-rc.d -f trafikito remove" >>$BASEDIR/lib/remove_startup.sh
+                echo "rm -f /etc/init.d/trafikito"     >>$BASEDIR/lib/remove_startup.sh
+                update-rc.d trafikito defaults 99
+                update-rc.d trafikito enable
+                service trafikito start
                 ;;
-            stop)
-                log_daemon_msg "Stopping \$NAME"
-                PID=\`pgrep -f "\$PIDLIST"\`
-                if [ \$? -ne 0 ]; then
-                    log_failure_msg "Trafikito alread stopped"
-                else
-                    kill -9 \$PID
-                    log_end_msg \$?
-                fi
-                ;;
-            restart)
-                \$0 stop
-                \$0 start
-                ;;
-            status)
-                PID=\`pgrep -f "\$PIDLIST"\`
-                R=\$?
-                if [ \$R -eq 0 ]; then
-                    set \$PID; $ECHO "Trafikito agent running (pid=\$*)"
-                else
-                    $ECHO "Trafikito agent stopped"
-                    tail /opt/trafikito/var/trafikito.log 2>/dev/null
-                fi
-                exit \$R
-                ;;
-            *)
-                $ECHO "Usage: /etc/init.d/trafikito {start|stop|restart|status}"
-                exit 1
+            *chkconfig)
+                echo "echo Removing System V startup"  >$BASEDIR/lib/remove_startup.sh
+                echo "service trafikito stop"         >>$BASEDIR/lib/remove_startup.sh
+                echo "chkconfig --del trafikito"      >>$BASEDIR/lib/remove_startup.sh
+                echo "rm -f /etc/init.d/trafikito"    >>$BASEDIR/lib/remove_startup.sh
+                chkconfig --add trafikito
+                chkconfig trafikito on
+                service trafikito start
                 ;;
         esac
 
-        exit 0
-STOP
-
-       $ECHO "Removing System V startup"        >$BASEDIR/lib/remove_startup.sh
-       $ECHO "update-rc.d -f trafikito remove" >>$BASEDIR/lib/remove_startup.sh
+        # remove script to manually control trafikito
+        rm $BASEDIR/trafikito
 
         exit 0
     fi
