@@ -219,6 +219,8 @@ fn_install_tool() {
         /usr/bin/yum -y install "$pkg"
     elif [ -x /sbin/apk ]; then # alpine
         /sbin/apk --no-cache add "$pkg"
+    elif [ -x /sbin/pacman ]; then # arch
+        /usr/sbin/pacman -S add "$pkg"
     else
         $ECHO "  ERROR: this system's package manager is not supported"
         $ECHO "    Please contact Trafikito support for help"  # TODO
@@ -419,6 +421,7 @@ if [ "$WHOAMI" != "root" ]; then
     $ECHO "You can control the script manually with:"
     $ECHO
     $ECHO "  $BASEDIR/trafikito {start|stop|restart|status}"
+    $ECHO
     exit 0
 fi
 
@@ -438,7 +441,6 @@ if [ $? -eq 0 ]; then
         echo "Type=simple"
         echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
         echo "User=nobody"
-        echo "Group=nogroup"
         echo "[Install]"
         echo "WantedBy=multi-user.target"
         ) >/etc/systemd/system/trafikito.service
@@ -448,6 +450,7 @@ if [ $? -eq 0 ]; then
         echo "systemctl disable trafikito"
         echo "rm -f /etc/systemd/system/trafikito.service"
         ) >$BASEDIR/lib/remove_startup.sh
+        chown $RUNAS $BASEDIR/lib/remove_startup.sh
         systemctl enable trafikito
         systemctl start trafikito
         systemctl status trafikito
@@ -494,19 +497,25 @@ if [ ! -z "$control" ]; then
 
         case $control in
             *update-rc.d)
-                echo "echo Removing System V startup"   >$BASEDIR/lib/remove_startup.sh
-                echo "service trafikito stop"          >>$BASEDIR/lib/remove_startup.sh
-                echo "update-rc.d -f trafikito remove" >>$BASEDIR/lib/remove_startup.sh
-                echo "rm -f /etc/init.d/trafikito"     >>$BASEDIR/lib/remove_startup.sh
+                (
+                echo "echo Removing System V startup"
+                echo "service trafikito stop"       
+                echo "update-rc.d -f trafikito remove"
+                echo "rm -f /etc/init.d/trafikito" 
+                ) >$BASEDIR/lib/remove_startup.sh
+                chown $RUNAS $BASEDIR/lib/remove_startup.sh
                 update-rc.d trafikito defaults 99
                 update-rc.d trafikito enable
                 service trafikito start
                 ;;
             *chkconfig)
-                echo "echo Removing System V startup"  >$BASEDIR/lib/remove_startup.sh
-                echo "service trafikito stop"         >>$BASEDIR/lib/remove_startup.sh
-                echo "chkconfig --del trafikito"      >>$BASEDIR/lib/remove_startup.sh
-                echo "rm -f /etc/init.d/trafikito"    >>$BASEDIR/lib/remove_startup.sh
+                (
+                echo "echo Removing System V startup"
+                echo "service trafikito stop"
+                echo "chkconfig --del trafikito"
+                echo "rm -f /etc/init.d/trafikito"    
+                ) > $BASEDIR/lib/remove_startup.sh
+                chown $RUNAS $BASEDIR/lib/remove_startup.sh
                 chkconfig --add trafikito
                 chkconfig trafikito on
                 service trafikito start
@@ -519,3 +528,39 @@ if [ ! -z "$control" ]; then
         exit 0
     fi
 fi
+
+#################################################################
+# openRC: Arch + Gentoo
+#################################################################
+control=`which rc-update`
+if [ ! -z "$control" ]; then
+    echo "openRC is available on this server..."
+    fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
+    if [ $? -eq 1 ]; then
+        (
+        # remove hash bang and redefine BASEDIR
+        cat $BASEDIR/trafikito | sed -e "s#export BASEDIR.*#export BASEDIR=$BASEDIR#"
+        ) >/etc/init.d/trafikito
+        chmod +x /etc/init.d/trafikito
+        (
+        echo "echo Removing openRC startup"
+        echo "rc-service trafikito stop"       
+        echo "rc-update del trafikito"
+        echo "rm -f /etc/init.d/trafikito" 
+        ) >$BASEDIR/lib/remove_startup.sh
+        chown $RUNAS $BASEDIR/lib/remove_startup.sh
+        rc-update add trafikito
+        rc-service trafikito start
+
+        # remove script to manually control trafikito
+        rm $BASEDIR/trafikito
+    fi
+    exit 0
+fi
+
+
+echo "Could not determine the startup method on this server"
+echo "You can control the script manually with:"
+echo
+echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+echo

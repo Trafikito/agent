@@ -47,23 +47,28 @@ $ECHO ""
 BASEDIR="${0%/*}"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-while true; do
-    $ECHO -n "1/2: Do you want to STOP the Trafikto agent? (type 'yes' to continue): "; read x
-    if [ "$x" = 'yes' ]; then
-        break
-    fi
+$ECHO -n "1/2: Do you want to STOP the Trafikto agent? (type 'yes' to continue): "; read x
+if [ "$x" != 'yes' ]; then
     $ECHO "** Uninstall aborted!"
     exit 0
-done
+fi
 
 WHOAMI=`whoami`
 
 # remove startup config
 if [ -f $BASEDIR/lib/remove_startup.sh ]; then
     . $BASEDIR/lib/remove_startup.sh
+elif [ -f $BASEDIR/trafikito ]; then
+    $BASEDIR/trafikito stop
 fi
 
 # now remove everything in BASEDIR
+$ECHO -n "2/2: Do you want to remove the Trafikto agent files in $BASEDIR? (type 'yes' to continue): "; read x
+if [ "$x" != 'yes' ]; then
+    $ECHO "** Uninstall aborted!"
+    exit 0
+fi
+
 rm -rf "$BASEDIR"
 if [ $? -ne 0 ]; then
     $ECHO "** Removing $BASEDIR failed! Looks like you don't have write permission"
