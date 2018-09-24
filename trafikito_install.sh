@@ -221,6 +221,8 @@ fn_install_tool() {
         /sbin/apk --no-cache add "$pkg"
     elif [ -x /sbin/pacman ]; then # arch
         /usr/sbin/pacman -S add "$pkg"
+    elif [ `which zypper` ]; then # SuSE
+        zypper install "$pkg"
     else
         $ECHO "  ERROR: this system's package manager is not supported"
         $ECHO "    Please contact Trafikito support for help"  # TODO
