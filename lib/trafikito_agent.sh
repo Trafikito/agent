@@ -315,10 +315,8 @@ fn_install_trafikito_widget() {
     REAL_COMMAND=`echo $data | awk -F "=" '{print $2}'`
 
     WIDGET_OUTPUT_FILE="$BASEDIR/var/widget_output_$WIDGET_ID.tmp"
-    # create the file
-    >$WIDGET_OUTPUT_FILE
-    CMD_TO_EXECUTE="$(eval echo "\$$REAL_COMMAND")"
-    eval "$CMD_TO_EXECUTE >$WIDGET_OUTPUT_FILE 2>&1"
+    echo "*-*-*-*------------ Trafikito command: $REAL_COMMAND" >$WIDGET_OUTPUT_FILE
+    eval "$REAL_COMMAND" >>$WIDGET_OUTPUT_FILE"
 
     installResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     $URL/v2/widget/install \
