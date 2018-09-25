@@ -308,13 +308,29 @@ fn_install_trafikito_widget() {
 
     # add command
     echo $data >>$BASEDIR/available_commands.sh
-    data=`echo $data | awk -F "=" '{print $1}'`
 
-    data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
-               --url     "$URL/v2/widget/install" \
-               --header  "Content-Type: application/json" \
-               --data "{ \"serverApiKey\": \"$API_KEY\", \"serverId\": \"$SERVER_ID\", \"widgetId\": \"$WIDGET_ID\", \"cmd\": \"$data\" }"`
+    # TODO check this code. Update: widget install endpoint must get sample output executed on this machine
+
+    CMD=`echo $data | awk -F "=" '{print $1}'`
+    REAL_COMMAND=`echo $data | awk -F "=" '{print $2}'`
+
+    WIDGET_OUTPUT_FILE="$BASEDIR/var/widget_output_$WIDGET_ID.tmp"
+    # create the file
+    >$WIDGET_OUTPUT_FILE
+    CMD_TO_EXECUTE="$(eval echo "\$$REAL_COMMAND")"
+    eval "$CMD_TO_EXECUTE >$WIDGET_OUTPUT_FILE 2>&1"
+
+    installResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
+     --url     $URL/v2/widget/install \
+     --form    output=@$WIDGET_OUTPUT_FILE \
+     --form    serverId=$SERVER_ID \
+     --form    widgetId=$WIDGET_ID \
+     --form    cmd=$CMD \
+     --form    serverApiKey=$API_KEY`
+
     fn_check_curl_error $? "confirming widget $WIDGET_ID installed"
+    # remove temp file
+    rm $WIDGET_OUTPUT_FILE >/dev/null 2>&1
 }
 
 ##################################################
