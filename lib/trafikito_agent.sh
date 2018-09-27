@@ -69,15 +69,15 @@ RegexpValid="$RegexpCMD|$RegexpCMT|$RegexpSPC"            # valid lines used lat
 
 # keep these 2 close to regexp definitions :-)
 fn_valid_commands() {
-    egrep $RegexpCommand $BASEDIR/available_commands.sh
+    egrep $RegexpCommand
 }
 
 fn_invalid_commands() {
-    nl -ba $BASEDIR/available_commands.sh | egrep -v $RegexpValid
+    nl -ba | egrep -v $RegexpValid
 }
 
 # valid commands into $TMP_FILE and source it
-fn_valid_commands >$TMP_FILE
+cat $BASEDIR/available_commands.sh | fn_valid_commands >$TMP_FILE
 . $TMP_FILE
 
 # source function to set os facts || exit 1
@@ -300,7 +300,7 @@ fn_install_trafikito_widget() {
     fn_check_curl_error $? "installing widget $WIDGET_ID"
 
     # check that we got a valid command
-    fn_invalid_command >$TMP_FILE
+    echo $data | fn_invalid_commands >$TMP_FILE
     if [ -s $TMP_FILE ]; then
         fn_send_error 102 $TMP_FILE 'error when installing widget'
         return
@@ -344,7 +344,7 @@ fi
 
 
 # send errors in available_commands.sh with line numbers to upstream
-fn_invalid_commands >$TMP_FILE
+cat $BASEDIR/available_commands.sh | fn_invalid_commands >$TMP_FILE
 if [ -s $TMP_FILE ]; then
     fn_send_error 100 $TMP_FILE "error in $BASEDIR/available_commands.sh"
 fi
@@ -390,7 +390,7 @@ done
 
 # collect available commands from available_commands.sh
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
-fn_valid_commands >>$TMP_FILE;
+cat $BASEDIR/available_commands.sh | fn_valid_commands >>$TMP_FILE;
 
 TIME_TOOK_LAST_TIME=0
 if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
