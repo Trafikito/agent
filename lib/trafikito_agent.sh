@@ -302,8 +302,10 @@ fn_install_trafikito_widget() {
     # check that we got a valid command
     echo $data | fn_invalid_commands >$TMP_FILE
     if [ -s $TMP_FILE ]; then
-        fn_send_error 102 $TMP_FILE 'error when installing widget'
+        fn_send_error 102 $TMP_FILE 'error while installing widget'
         return
+    else
+        rm -f $BASEDIR/var/error-102
     fi
 
     # add command
@@ -345,8 +347,11 @@ fi
 
 # send errors in available_commands.sh with line numbers to upstream
 cat $BASEDIR/available_commands.sh | fn_invalid_commands >$TMP_FILE
+
 if [ -s $TMP_FILE ]; then
     fn_send_error 100 $TMP_FILE "error in $BASEDIR/available_commands.sh"
+else
+    rm -f $BASEDIR/var/error-100
 fi
 
 fn_set_os
@@ -388,7 +393,7 @@ do
     fn_log "  $widget installation is done"
 done
 
-# collect available commands from available_commands.sh
+# collect only valid available commands from available_commands.sh
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
 cat $BASEDIR/available_commands.sh | fn_valid_commands >>$TMP_FILE;
 
@@ -406,6 +411,7 @@ saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30
 fn_check_curl_error $? "saving result"
 if [ "$saveResult" = "OK" ]; then
     fn_debug "saveResult: $saveResult"
+    rm -f $BASEDIR/var/error-101
 else
     echo $saveResult >$TMP_FILE
     fn_send_error 101 $TMP_FILE "error in saveResult"

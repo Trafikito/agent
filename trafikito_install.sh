@@ -362,7 +362,9 @@ curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --form   "osRelease=$os_release" \
      --form   "centosFlavor=$centos_flavor" \
      --output "$BASEDIR/available_commands.sh"
-
+echo
+echo "  done"
+echo
 # now everything will be owned by $RUNAS
 chown -R "$RUNAS" $BASEDIR
 
