@@ -14,16 +14,17 @@ pgp: Tue Sep 18 19:49:51 NZST 2018
     * simplify SysV startup scripts when not systemd not available
     * check running with selinux enabled
     * check distros: already tested install and running of agent, but startup needs fixing
-      - Alpine
-      - Arch
-      - Debian 8.10  SysV    DONE
-      - Debian 9.5   systemd DONE
-      - Docker: depends on distro image but document howto
+      - Alpine 3.8.0                 OpenRC  DONE
+      - Arch   archlinux-2017.12.01  systemd DONE
+      - Debian 8.10                  SysV    DONE
+      - Debian 9.5                   systemd DONE
+      - Docker: depends on distro image but will document howto
+      - Fedora 28                    systemd DONE
       - FreeBSD
       - Gentoo
       - NetBSD
-      - Slackware
-      - SuSE
-      - Ubuntu 14.04 SysV    DONE
-      - Ubuntu 17.10 systemd DONE
+      - Slack
+      - SuSE   42.3                  systemd DONE
+      - Ubuntu 14.04                 SysV    DONE
+      - Ubuntu 17.10                 systemd DONE
       - ?
