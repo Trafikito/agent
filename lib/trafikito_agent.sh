@@ -40,9 +40,8 @@ export BASEDIR=$1
 # TODO remove this in production
 DEBUG=1
 
-
 # agent version: will be compared as a string
-export AGENT_VERSION=17
+export AGENT_VERSION=39
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # Trafikito API URLs: these may change with different api versions: do not store in config
@@ -61,7 +60,7 @@ LAST_CONFIG=$BASEDIR/var/last_config.tmp
 . $BASEDIR/etc/trafikito.cfg || exit 1
 
 # regexps for available_commands.sh checking
-                                RegexpCommand='^trafikito_[a-zA-Z0-9_]+="[^"]+"[[:space:]]*$' # command line without line number
+RegexpCommand='^trafikito_[a-zA-Z0-9_]+="[^"]+"[[:space:]]*$' # command line without line number
 RegexpCMD='^[[:space:]]+[[:digit:]]+[[:space:]]+trafikito_[a-zA-Z0-9_]+="[^"]+"[[:space:]]*$' # command line with line number
 RegexpCMT='^[[:space:]]+[[:digit:]]+[[:space:]]+#'        # comments with line number (leading space okay)
 RegexpSPC='^[[:space:]]+[[:digit:]]+[[:space:]]*$'        # blank lines with line number
@@ -107,41 +106,15 @@ fn_check_curl_error() {
     fi
 }
 
-##############################################################
-# function to convert a \n seperated string into a json array
-##############################################################
-fn_json()  {
-    errcode=$1
-    errfile=$2
-    shift
-    shift
-    message=$*
-    flag=0
-    echo -n '['
-    cat $errfile | while read x; do
-        if [ $flag -ne 0 ]; then
-            echo -n ','
-        fi
-        flag=1
-        # protect " and strip \r, leading and trailing wspace
-        token=`echo $x | sed -e 's/\r//' -e 's/"/\\\"/g'  -e 's/^ *//' -e 's/ *$//'`
-        echo -n \"$token\"
-    done
-    echo ']'
-}
-
 ###############################################
 # function to log and send an error to upstream
 ###############################################
 fn_send_error() {
     errcode=$1
     errfile=$2
-    shift
-    shift
-    message=$*
-    json=`fn_json $errcode $errfile $message`
+    message=$3
+    details=$4
     fn_log "** ERROR: $message"
-    fn_log "   details: $json"
     # test age of error
     last=0
     if [ -f "$BASEDIR/error.$errcode" ]; then
@@ -149,21 +122,25 @@ fn_send_error() {
     fi
     now=`date +%s`
     age=$(( now - last ))
-    if [ $age -gt 86400 ]; then
+    # report same error once per 3hours
+    if [ $age -gt 10800 ]; then
         fn_log "         reporting error to trafikito"
-        # TODO
         ###############################################################################
-        #curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
-        #     --url     "$URL/v2/agent/error_feedback" \
-        #     --header  "Content-Type: application/json" \
-        #     --data "{ \"code\": \"$errcode\", \"message\": \"$message\", \"details\": \"$json\" }"
-        # check for curl error
-        #fn_check_curl_error $? 'sending error'
+        curl --request POST --silent --retry 3 --retry-delay 10 --max-time 30 \
+              --url "$URL/v2/agent/error_feedback" \
+              --header 'cache-control: no-cache' \
+              --header 'content-type: multipart/form-data' \
+              -F "code=$errcode" \
+              -F "message=$message" \
+              -F "details=$details" \
+              -F "serverApiKey=$API_KEY"
+
+        fn_check_curl_error $? 'sending error'
         ###############################################################################
         fn_log "         done"
         echo $now >$BASEDIR/var/error-$errcode
     else
-        fn_log "          not reported to trafikito"
+        fn_log "          not reported to Trafikito"
     fi
 }
 
@@ -179,6 +156,12 @@ fn_send_error() {
 #   1 error and log error
 ##########################################################
 fn_get_config() {
+    if [ -f $LAST_CONFIG ]; then
+        lastData=`cat $LAST_CONFIG`
+        set $lastData
+        CALL_TOKEN=$1
+    fi
+
     fn_debug "Previous hash: $CALL_TOKEN"
 
     data=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
@@ -188,24 +171,33 @@ fn_get_config() {
     # check for curl error
     fn_check_curl_error $? 'getting config'
     # check for trafikito error
+    fn_debug "Got cycle data: $data"
+
     if [ -z "$data" ]; then
         fn_log "curl returned no data: cannot complete run"
         return 1
     fi
+
     echo "$data" | grep -q error
     if [ $? -eq 0 ]; then
-        # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED","env":"production"},"data":null}
+        # {"error":{"code":"#6d5jyjytjh","message":"SEND_DATA_ONCE_PER_MINUTE_OR_YOU_WILL_BE_BLOCKED"},"data":null}
         error=`echo "$data" | sed -e 's/.*message":"//' -e 's/".*//'`
+        fn_send_error 104 "" "$error" "$data"
         fn_log "curl returned Trafikito error '$error': cannot complete run"
         return 1
     fi
 
-    fn_debug "Got data: $data"
+    echo "$data" | grep -q "^{|STOP"
+    if [ $? -eq 0 ]; then
+        fn_send_error 105 "" "AGENT_INVALID_CYCLE_DATA" "$data"
+        return 1
+    fi
 
     # server removed from UI or other reason to stop?
     # create $BASEDIR/var/STOP because this user may not have super user access
     case $data in STOP*)
         fn_log "Stopping the agent. Reason: $data"
+        fn_send_error 103 $TMP_FILE "AGENT_STOPPING" "$data"
         echo $data >$BASEDIR/var/STOP
         exit 1
     esac
@@ -259,28 +251,31 @@ fn_execute_trafikito_cmd() {
 ##############################
 fn_download()
 {
-    case `hostname -f` in
-        *home) echo "http://tui.home/trafikito/$1" ;;
-            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
-    esac
+ echo "$URL/v2/agent/get_agent_file?file=$1"
+
+#    fn_debug "Downloading... $URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+#    case `hostname -f` in
+#        *home) echo "http://tui.home/trafikito/$1" ;;
+#            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+#    esac
 }
 
 fn_upgrade()
 {
     fn_debug "*** Starting to download agent files"
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' --output "${BASEDIR}/trafikito" `fn_download trafikito` > /dev/null
     fn_check_curl_error $? "downloading trafikito"
     fn_debug "*** 1/5 done"
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' --output "${BASEDIR}/uninstall.sh" `fn_download uninstall.sh` > /dev/null
     fn_check_curl_error $? "downloading uninstall"
     fn_debug "*** 2/5 done"
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' --output "${BASEDIR}/lib/trafikito_wrapper.sh" `fn_download lib/trafikito_wrapper.sh` > /dev/null
     fn_check_curl_error $? "downloading wrapper"
     fn_debug "*** 3/5 done"
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' --output "${BASEDIR}/lib/trafikito_agent.sh" `fn_download lib/trafikito_agent.sh` > /dev/null
     fn_check_curl_error $? "downloading agent"
     fn_debug "*** 4/5 done"
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' --output "${BASEDIR}/lib/set_os.sh" `fn_download lib/set_os.sh` > /dev/null
     fn_check_curl_error $? "downloading set_os"
     fn_debug "*** 5/5 done"
 
@@ -302,7 +297,9 @@ fn_install_trafikito_widget() {
     # check that we got a valid command
     echo $data | fn_invalid_commands >$TMP_FILE
     if [ -s $TMP_FILE ]; then
-        fn_send_error 102 $TMP_FILE 'error while installing widget'
+        fn_debug "Invalid command while installing widget:"
+        fn_debug `cat $TMP_FILE`
+        fn_send_error 102 $TMP_FILE 'AGENT_INSTALL_WIDGET_FAILED_INVALID_COMMAND'
         return
     else
         rm -f $BASEDIR/var/error-102
@@ -311,14 +308,18 @@ fn_install_trafikito_widget() {
     # add command
     echo $data >>$BASEDIR/available_commands.sh
 
-    # TODO check this code. Update: widget install endpoint must get sample output executed on this machine
-
     CMD=`echo $data | awk -F "=" '{print $1}'`
-    REAL_COMMAND=`echo $data | awk -F "=" '{print $2}'`
+    REAL_COMMAND=`echo $data | awk -F "=" '{print $2}' | sed -e 's/"//g'`
+
+    fn_debug "Widget cmd: $CMD"
+    fn_debug "Widget real command: $REAL_COMMAND"
+    fn_debug "$CMD output:"
 
     WIDGET_OUTPUT_FILE="$BASEDIR/var/widget_output_$WIDGET_ID.tmp"
     echo "*-*-*-*------------ Trafikito command: $REAL_COMMAND" >$WIDGET_OUTPUT_FILE
     eval "$REAL_COMMAND >> $WIDGET_OUTPUT_FILE 2>&1"
+
+    fn_debug `cat $WIDGET_OUTPUT_FILE`
 
     installResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
      --url     $URL/v2/widget/install \
@@ -328,9 +329,11 @@ fn_install_trafikito_widget() {
      --form    cmd=$CMD \
      --form    serverApiKey=$API_KEY`
 
+    fn_debug "Install result: $installResult"
+
     fn_check_curl_error $? "confirming widget $WIDGET_ID installed"
     # remove temp file
-    rm $WIDGET_OUTPUT_FILE >/dev/null 2>&1
+    rm "$WIDGET_OUTPUT_FILE" >/dev/null 2>&1
 }
 
 ##################################################
@@ -344,12 +347,13 @@ if [ -f $BASEDIR/var/STOP ]; then
     exit 1
 fi
 
-
 # send errors in available_commands.sh with line numbers to upstream
 cat $BASEDIR/available_commands.sh | fn_invalid_commands >$TMP_FILE
 
 if [ -s $TMP_FILE ]; then
-    fn_send_error 100 $TMP_FILE "error in $BASEDIR/available_commands.sh"
+    fn_debug "Invalid commands:"
+    fn_debug `cat $TMP_FILE`
+    fn_send_error 100 $TMP_FILE "AGENT_INVALID_COMMANDS" "error in $BASEDIR/available_commands.sh"
 else
     rm -f $BASEDIR/var/error-100
 fi
@@ -385,14 +389,6 @@ do
     fn_log "  $cmd is done"
 done
 
-# Install widgets
-for widget in $WIDGETS
-do
-    fn_log "Installing $widget"
-    fn_install_trafikito_widget "$widget"
-    fn_log "  $widget installation is done"
-done
-
 # collect only valid available commands from available_commands.sh
 echo "*-*-*-*------------ Available commands:" >>$TMP_FILE
 cat $BASEDIR/available_commands.sh | fn_valid_commands >>$TMP_FILE;
@@ -414,10 +410,18 @@ if [ "$saveResult" = "OK" ]; then
     rm -f $BASEDIR/var/error-101
 else
     echo $saveResult >$TMP_FILE
-    fn_send_error 101 $TMP_FILE "error in saveResult"
+    fn_send_error 101 $TMP_FILE "AGENT_SAVE_RESULT_FAILED"
 fi
 
-fn_debug "DONE!"
+fn_debug "Saving results done!"
+
+# Install widgets
+for widget in $WIDGETS
+do
+    fn_log "Installing $widget"
+    fn_install_trafikito_widget "$widget"
+    fn_log "Widget  $widget installation is done"
+done
 
 END=$(date +%s)
 echo "$(($END-$START))" >$BASEDIR/var/time_took_last_time.tmp

@@ -65,7 +65,7 @@ status() {
            ;;
         1) echo "Trafikito agent stopped" 1>&2
            echo 1>&2
-           tail $BASEDIR/var/trafikito.log 2>/dev/null
+           # tail $BASEDIR/var/trafikito.log 2>/dev/null
            ;;
     esac
 }

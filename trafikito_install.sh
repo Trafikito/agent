@@ -74,15 +74,11 @@ usage() {
     echo
     echo "Usage: sh $0 --user_api_key=<api_key> --workspace_id=<workspace_id> [--servername=<servername>]"
     echo
-    echo "To install Trafikito agent you need to get server api key, workspace id, and (optional)"
-    echo "default name."
-    echo
-    echo "To get all the details please follow these steps:"
+    echo "To install Trafikito agent, please follow these steps:"
     echo "  1. Visit https://trafikito.com/servers"
     echo "  2. Find your server on servers list or add new one"
     echo "  3. Click 3 dots button to open menu and select: How to install?"
-    echo "  4. Use this command (replace <user_api_key> and <server_id> with correct values):"
-    echo "     sh $0 --user_api_key=<user_api_key> --workspace_id=<workspace_id> [--hostnae=<default name>]"
+    echo "  4. Follow instructions on the dashboard"
     ) 1>&2
     exit 1
 }
@@ -118,7 +114,7 @@ if [ "$WHOAMI" != "root" ]; then
     echo "Root user is used to make script running as 'nobody' which improves security."
     echo "To install as root either log in as root and execute the script or use:"
     echo
-    echo "  sudo sh $0"
+    echo "  sudo sh $0 --user_api_key=$USER_API_KEY --workspace_id=$WORKSPACE_ID --servername=$SERVER_NAME"
     echo
     fn_prompt "N" "Continue as $WHOAMI [yN]: " || exit 1
     RUNAS="$WHOAMI"
@@ -201,8 +197,8 @@ fn_install_tools() {
     elif [ `which zypper` ]; then # SuSE
         zypper install $TOOLS
     else
-        echo "  ERROR: this system's package manager is not supported"
-        echo "    Please contact Trafikito support for help"  # TODO
+        echo "  ERROR: your system's package manager is not supported"
+        echo "    Supported package managers: apt-get, yum, apk, pacman, zypper"
         return 1
     fi
 }
@@ -258,17 +254,19 @@ fn_download ()
     count=$1
     file=$2
 
-    # for development
-    case `hostname` in
-        *home) url="http://tui.home/trafikito/$1" ;;
-            *) url="$URL/v2/agent/get_agent_file?file=$file -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
-    esac
+    url="$URL/v2/agent/get_agent_file?file=$file"
 
-    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$BASEDIR/$file" $url > /dev/null
-    if [ ! -f "$file" ]; then
+    # for development
+    #    case `hostname` in
+    #        *home) url="http://tui.home/trafikito/$1" ;;
+    #            *) url="$URL/v2/agent/get_agent_file?file=$file -H \"Cache-Control: no-cache\" -H \"Content-Type: text/plain\""
+    #    esac
+
+    curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$BASEDIR/$file" -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$url" > /dev/null
+    if [ ! -f "$BASEDIR/$file" ]; then
         echo "*** $count/5 Failed to download. Retrying."
-        curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$BASEDIR/$file" $url > /dev/null
-        if [ ! -f "$file" ]; then
+        curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$BASEDIR/$file" -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$url" > /dev/null
+        if [ ! -f "$BASEDIR/$file" ]; then
             echo "*** $count/5 Failed to download: $file"
             exit 1;
         fi
@@ -292,7 +290,7 @@ chmod +x $BASEDIR/trafikito $BASEDIR/uninstall.sh $BASEDIR/lib/*
 fn_set_os
 
 echo "* Create server and get config file"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_agent_file?file=trafikito.conf \
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 "$URL/v2/agent/get_agent_file?file=trafikito.conf" \
     -H 'Cache-Control: no-cache' \
     -H 'Content-Type: application/json' \
     -d "{ \
@@ -302,13 +300,6 @@ curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 $URL/v2/agent/get_
         \"tmpFilePath\": \"$TMP_FILE\" \
         }" >$TMP_FILE
 
-# TODO LUKAS: The only stuff I need from this is the serverid and api_key as follows
-# (the config file has moved to $TRAFIKITO/etc/trafikito.conf)
-# SERVER_ID="jhgfhjgff"
-# API_KEY="jhgfhjgff"
-# capitals because that is standard for global variables in shell
-# no spaces before or after '=' and value protected with "..." (in case you allow an '=' to be part of the server id)
-# will the Trafikito API URLs change? If not we don't need it
 grep -q server_id $TMP_FILE
 if [ $? -ne 0 ]; then
     cat $TMP_FILE
@@ -384,35 +375,40 @@ fi
 x=`which systemctl 2>/dev/null`
 if [ $? -eq 0 ]; then
     echo "You are running systemd..."
-    fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
-    if [ $? -eq 1 ]; then
-        (
-        echo "[Unit]"
-        echo "Description=Trafikito Agent"
-        echo "After=network.target"
-        echo "[Service]"
-        echo "Type=simple"
-        echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
-        echo "User=nobody"
-        echo "[Install]"
-        echo "WantedBy=multi-user.target"
-        ) >/etc/systemd/system/trafikito.service
-        ( 
-        echo "echo Disabling and removing systemd"
-        echo "systemctl stop trafikito"
-        echo "systemctl disable trafikito"
-        echo "rm -f /etc/systemd/system/trafikito.service"
-        ) >$BASEDIR/lib/remove_startup.sh
-        chown $RUNAS $BASEDIR/lib/remove_startup.sh
-        systemctl enable trafikito
-        systemctl start trafikito
-        systemctl status trafikito
+    echo "Configuring, enabling and starting the agent service..."
+    (
+    echo "[Unit]"
+    echo "Description=Trafikito Agent"
+    echo "After=network.target"
+    echo "[Service]"
+    echo "Type=simple"
+    echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
+    echo "User=nobody"
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+    ) >/etc/systemd/system/trafikito.service
+    (
+    echo "echo Disabling and removing systemd"
+    echo "systemctl stop trafikito"
+    echo "systemctl disable trafikito"
+    echo "rm -f /etc/systemd/system/trafikito.service"
+    ) >$BASEDIR/lib/remove_startup.sh
+    chown $RUNAS $BASEDIR/lib/remove_startup.sh
+    systemctl enable trafikito
+    systemctl start trafikito
+    systemctl status trafikito --no-pager
 
-        # remove script to manually control trafikito
-        rm $BASEDIR/trafikito
+    # remove script to manually control trafikito
+    # rm $BASEDIR/trafikito
+    echo
+    echo "Done. You will see data at dashboard after a minute."
+    echo
+    echo "You can control the agent manually with:"
+    echo
+    echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
 
-        exit 0
-    fi
+    exit 0
 fi
 
 #################################################################
@@ -424,62 +420,68 @@ if [ $? -ne 0 ]; then
 fi
 if [ ! -z "$control" ]; then
     echo "System V using $control is available on this server..."
-    fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
-    if [ $? -eq 1 ]; then
-        (
-        echo "#!/bin/sh"
-        echo "#"
-        echo "# chkconfig: 345 56 50"
-        echo "#"
-        echo "### BEGIN INIT INFO"
-        echo "# Provides:          trafikito"
-        echo "# Required-Start:"
-        echo "# Required-Stop:"
-        echo "# Should-Start:"
-        echo "# Should-Stop:"
-        echo "# Default-Start:"
-        echo "# Default-Stop:"
-        echo "# Short-Description: Starts or stops the trafikito agent"
-        echo "# Description:       Starts and stops the trafikito agent"
-        echo "### END INIT INFO"
-        echo
-        # remove hash bang and redefine BASEDIR
-        grep -v '#!' $BASEDIR/trafikito | sed -e "s#export BASEDIR.*#export BASEDIR=$BASEDIR#"
-        ) >/etc/init.d/trafikito
-        chmod +x /etc/init.d/trafikito
+    echo "Configuring, enabling and starting the agent service..."
+    (
+    echo "#!/bin/sh"
+    echo "#"
+    echo "# chkconfig: 345 56 50"
+    echo "#"
+    echo "### BEGIN INIT INFO"
+    echo "# Provides:          trafikito"
+    echo "# Required-Start:"
+    echo "# Required-Stop:"
+    echo "# Should-Start:"
+    echo "# Should-Stop:"
+    echo "# Default-Start:"
+    echo "# Default-Stop:"
+    echo "# Short-Description: Starts or stops the trafikito agent"
+    echo "# Description:       Starts and stops the trafikito agent"
+    echo "### END INIT INFO"
+    echo
+    # remove hash bang and redefine BASEDIR
+    grep -v '#!' $BASEDIR/trafikito | sed -e "s#export BASEDIR.*#export BASEDIR=$BASEDIR#"
+    ) >/etc/init.d/trafikito
+    chmod +x /etc/init.d/trafikito
 
-        case $control in
-            *update-rc.d)
-                (
-                echo "echo Removing System V startup"
-                echo "service trafikito stop"       
-                echo "update-rc.d -f trafikito remove"
-                echo "rm -f /etc/init.d/trafikito" 
-                ) >$BASEDIR/lib/remove_startup.sh
-                chown $RUNAS $BASEDIR/lib/remove_startup.sh
-                update-rc.d trafikito defaults 99
-                update-rc.d trafikito enable
-                service trafikito start
-                ;;
-            *chkconfig)
-                (
-                echo "echo Removing System V startup"
-                echo "service trafikito stop"
-                echo "chkconfig --del trafikito"
-                echo "rm -f /etc/init.d/trafikito"    
-                ) > $BASEDIR/lib/remove_startup.sh
-                chown $RUNAS $BASEDIR/lib/remove_startup.sh
-                chkconfig --add trafikito
-                chkconfig trafikito on
-                service trafikito start
-                ;;
-        esac
+    case $control in
+        *update-rc.d)
+            (
+            echo "echo Removing System V startup"
+            echo "service trafikito stop"
+            echo "update-rc.d -f trafikito remove"
+            echo "rm -f /etc/init.d/trafikito"
+            ) >$BASEDIR/lib/remove_startup.sh
+            chown $RUNAS $BASEDIR/lib/remove_startup.sh
+            update-rc.d trafikito defaults 99
+            update-rc.d trafikito enable
+            service trafikito start
+            ;;
+        *chkconfig)
+            (
+            echo "echo Removing System V startup"
+            echo "service trafikito stop"
+            echo "chkconfig --del trafikito"
+            echo "rm -f /etc/init.d/trafikito"
+            ) > $BASEDIR/lib/remove_startup.sh
+            chown $RUNAS $BASEDIR/lib/remove_startup.sh
+            chkconfig --add trafikito
+            chkconfig trafikito on
+            service trafikito start
+            ;;
+    esac
 
-        # remove script to manually control trafikito
-        rm $BASEDIR/trafikito
+    # remove script to manually control trafikito
+    # rm $BASEDIR/trafikito
 
-        exit 0
-    fi
+    echo
+    echo "Done. You will see data at dashboard after a minute."
+    echo
+    echo "You can control the agent manually with:"
+    echo
+    echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
+
+    exit 0
 fi
 
 #################################################################
@@ -488,26 +490,33 @@ fi
 control=`which rc-update`
 if [ ! -z "$control" ]; then
     echo "openRC is available on this server..."
-    fn_prompt "Y" "Shall I configure, enable and start the agent? [Yn]: "
-    if [ $? -eq 1 ]; then
-        (
-        # remove hash bang and redefine BASEDIR
-        cat $BASEDIR/trafikito | sed -e "s#export BASEDIR.*#export BASEDIR=$BASEDIR#"
-        ) >/etc/init.d/trafikito
-        chmod +x /etc/init.d/trafikito
-        (
-        echo "echo Removing openRC startup"
-        echo "rc-service trafikito stop"       
-        echo "rc-update del trafikito"
-        echo "rm -f /etc/init.d/trafikito" 
-        ) >$BASEDIR/lib/remove_startup.sh
-        chown $RUNAS $BASEDIR/lib/remove_startup.sh
-        rc-update add trafikito
-        rc-service trafikito start
+    echo "Configuring, enabling and starting the agent service..."
+    (
+    # remove hash bang and redefine BASEDIR
+    cat $BASEDIR/trafikito | sed -e "s#export BASEDIR.*#export BASEDIR=$BASEDIR#"
+    ) >/etc/init.d/trafikito
+    chmod +x /etc/init.d/trafikito
+    (
+    echo "echo Removing openRC startup"
+    echo "rc-service trafikito stop"
+    echo "rc-update del trafikito"
+    echo "rm -f /etc/init.d/trafikito"
+    ) >$BASEDIR/lib/remove_startup.sh
+    chown $RUNAS $BASEDIR/lib/remove_startup.sh
+    rc-update add trafikito
+    rc-service trafikito start
 
-        # remove script to manually control trafikito
-        rm $BASEDIR/trafikito
-    fi
+    # remove script to manually control trafikito
+    # rm $BASEDIR/trafikito
+
+    echo
+    echo "Done. You will see data at dashboard after a minute."
+    echo
+    echo "You can control the agent manually with:"
+    echo
+    echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
+
     exit 0
 fi
 
