@@ -39,8 +39,6 @@ echo ""
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-export URL="https://ap-southeast-1.api.trafikito.com"
-
 # use printf (a shell builtin) here because echo is *very* distro dependant
 fn_prompt() {
     default=$1
@@ -249,26 +247,68 @@ fi
 echo
 echo "* Installing agent..."
 
+# select which edge to use and which use as a fallback
+API_EDGE="https://api.trafikito.com";
+
+fn_select_edge ()
+{
+    API_EDGE_1="https://ap-southeast-1.api.trafikito.com"
+    API_EDGE_2="https://eu-west-1.api.trafikito.com"
+    API_EDGE_3="https://us-east-1.api.trafikito.com"
+
+    # big range to avoid unequal random value distribution on some systems
+    DEFAULT_EDGE=`awk 'BEGIN{srand();print int(rand()*(12000-1))+1 }'`
+    if [ "$DEFAULT_EDGE" -gt 4000 ]; then
+        API_EDGE_1="https://eu-west-1.api.trafikito.com"
+        API_EDGE_2="https://us-east-1.api.trafikito.com"
+        API_EDGE_3="https://ap-southeast-1.api.trafikito.com"
+    fi
+
+    if [ "$DEFAULT_EDGE" -gt 8000 ]; then
+        API_EDGE_1="https://us-east-1.api.trafikito.com"
+        API_EDGE_2="https://ap-southeast-1.api.trafikito.com"
+        API_EDGE_3="https://eu-west-1.api.trafikito.com"
+    fi
+
+    testData=`curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$API_EDGE_1/v2/ping"`
+    if [ "$testData" = "OK" ]; then
+        API_EDGE="$API_EDGE_1"
+    else
+      testData=`curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$API_EDGE_2/v2/ping"`
+        if [ "$testData" = "OK" ]; then
+            API_EDGE="$API_EDGE_2"
+        else
+          testData=`curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$API_EDGE_3/v2/ping"`
+          if [ "$testData" = "OK" ]; then
+              API_EDGE="$API_EDGE_3"
+          else
+            echo "Network issues? Try again."
+          fi
+        fi
+    fi
+}
+
+fn_select_edge
+
+echo "Edge selected: $API_EDGE"
+
 fn_download ()
 {
     count=$1
     file=$2
 
-    url="$URL/v2/agent/get_agent_file?file=$file"
-
-    # for development
-    #    case `hostname` in
-    #        *home) url="http://tui.home/trafikito/$1" ;;
-    #            *) url="$URL/v2/agent/get_agent_file?file=$file -H \"Cache-Control: no-cache\" -H \"Content-Type: text/plain\""
-    #    esac
-
+    url="$API_EDGE/v2/agent/get_agent_file?file=$file"
     curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 --output "$BASEDIR/$file" -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$url" > /dev/null
     if [ ! -f "$BASEDIR/$file" ]; then
         echo "*** $count/5 Failed to download. Retrying."
         curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$BASEDIR/$file" -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$url" > /dev/null
         if [ ! -f "$BASEDIR/$file" ]; then
-            echo "*** $count/5 Failed to download: $file"
-            exit 1;
+            echo "*** $count/5 Failed to download. Retrying."
+            curl -X POST --silent --retry 3 --retry-delay 1 --max-time 60 --output "$BASEDIR/$file" -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$url" > /dev/null
+            if [ ! -f "$BASEDIR/$file" ]; then
+                echo "*** $count/5 Failed to download: $file"
+                exit 1;
+            fi
         fi
     else
         echo "*** $count/5 done"
@@ -276,6 +316,7 @@ fn_download ()
 }
 
 echo "*** Starting to download agent files"
+# during download - set which edge to use for future requests during installation
 fn_download 1 trafikito
 fn_download 2 uninstall.sh
 fn_download 3 lib/trafikito_wrapper.sh
@@ -290,7 +331,7 @@ chmod +x $BASEDIR/trafikito $BASEDIR/uninstall.sh $BASEDIR/lib/*
 fn_set_os
 
 echo "* Create server and get config file"
-curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 "$URL/v2/agent/get_agent_file?file=trafikito.conf" \
+curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 "$API_EDGE/v2/agent/get_agent_file?file=trafikito.conf" \
     -H 'Cache-Control: no-cache' \
     -H 'Content-Type: application/json' \
     -d "{ \
@@ -304,7 +345,7 @@ grep -q server_id $TMP_FILE
 if [ $? -ne 0 ]; then
     cat $TMP_FILE
     echo
-    echo "CANNOT COMPLETE INSTALLATION"
+    echo "Can not get configuration file. Network issue? Please try again."
     exit 1
 fi
 
@@ -331,7 +372,8 @@ trafikito_lsof_count_network_connections="lsof -i | grep -- '->' | wc -l"
 trafikito_lsof_count_open_files="lsof | wc -l"
 trafikito_netstat_i="netstat -i"
 trafikito_vmstat_s="vmstat -s"
-trafikito_top="top -bcn1"
+trafikito_top="top -bcn1 -o %MEM | sed -e '1,/^\s*$/ d' | head -n 7"
+trafikito_ps="ps aux --sort=-%mem,-%cpu --width 200 | head -n 7"
 STOP
 ) | while read line; do
     command=`echo "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
@@ -342,7 +384,7 @@ done
 
 echo "* Getting available commands file & setting default dashboard"
 curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
-     --url    "$URL/v2/agent/get_agent_file?file=available_commands.sh" \
+     --url    "$API_EDGE/v2/agent/get_agent_file?file=available_commands.sh" \
      --header "content-type: multipart/form-data" \
      --form   "output=@$TMP_FILE" \
      --form   "userApiKey=$USER_API_KEY" \
@@ -364,7 +406,13 @@ if [ "$WHOAMI" != "root" ]; then
     echo "Script was not installed as root: cannot configure startup"
     echo "You can control the script manually with:"
     echo
+    echo
+    echo
+    echo "Manual control with:"
     echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
+    echo "Uninstall with:"
+    echo "  sh $BASEDIR/uninstall"
     echo
     exit 0
 fi
@@ -403,9 +451,13 @@ if [ $? -eq 0 ]; then
     echo
     echo "Done. You will see data at dashboard after a minute."
     echo
-    echo "You can control the agent manually with:"
     echo
+    echo
+    echo "Manual control with:"
     echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
+    echo "Uninstall with:"
+    echo "  sh $BASEDIR/uninstall"
     echo
 
     exit 0
@@ -476,9 +528,13 @@ if [ ! -z "$control" ]; then
     echo
     echo "Done. You will see data at dashboard after a minute."
     echo
-    echo "You can control the agent manually with:"
     echo
+    echo
+    echo "Manual control with:"
     echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
+    echo "Uninstall with:"
+    echo "  sh $BASEDIR/uninstall"
     echo
 
     exit 0
@@ -512,17 +568,25 @@ if [ ! -z "$control" ]; then
     echo
     echo "Done. You will see data at dashboard after a minute."
     echo
-    echo "You can control the agent manually with:"
     echo
+    echo
+    echo "Manual control with:"
     echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+    echo
+    echo "Uninstall with:"
+    echo "  sh $BASEDIR/uninstall"
     echo
 
     exit 0
 fi
 
-
 echo "Could not determine the startup method on this server"
-echo "You can control the script manually with:"
 echo
+echo
+echo
+echo "Manual control with:"
 echo "  $BASEDIR/trafikito {start|stop|restart|status}"
+echo
+echo "Uninstall with:"
+echo "  sh $BASEDIR/uninstall"
 echo

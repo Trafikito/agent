@@ -30,6 +30,10 @@
 
 START=$(date +%s)
 
+# agent version: will be compared as a string
+export AGENT_VERSION=54
+export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
+
 # basedir is $1 to enable this to run from anywhere
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <trafikito_base_dir>" 1>&2
@@ -37,22 +41,31 @@ if [ $# -ne 1 ]; then
 fi
 export BASEDIR=$1
 
-# TODO remove this in production
-DEBUG=1
-
-# agent version: will be compared as a string
-export AGENT_VERSION=39
-export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
-
-# Trafikito API URLs: these may change with different api versions: do not store in config
-URL="https://ap-southeast-1.api.trafikito.com"
-
 # trim logfile to 1000 lines
 export LOGFILE=$BASEDIR/var/trafikito.log
 if [ -f $LOGFILE ]; then
     cp $LOGFILE $LOGFILE.bak
     tail -n 1000 $LOGFILE.bak >$LOGFILE
 fi
+
+###################################################
+# functions to handle logs instead of using syslog
+###################################################
+
+fn_log() {
+    echo "`date +'%x %X'` $*" >>"$LOGFILE"
+}
+
+fn_debug() {
+    if [ "$DEBUG" ]; then
+        fn_log "DEBUG $*"
+    fi
+}
+
+DEBUG=1
+
+fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
+fn_log "Agent v${AGENT_VERSION} run started"
 
 LAST_CONFIG=$BASEDIR/var/last_config.tmp
 
@@ -82,20 +95,6 @@ cat $BASEDIR/available_commands.sh | fn_valid_commands >$TMP_FILE
 # source function to set os facts || exit 1
 . $BASEDIR/lib/set_os.sh
 
-###################################################
-# functions to handle logs instead of using syslog
-###################################################
-
-fn_log() {
-    echo "`date +'%x %X'` $*" >>"$LOGFILE"
-}
-
-fn_debug() {
-    if [ "$DEBUG" ]; then
-        fn_log "DEBUG $*"
-    fi
-}
-
 # check for curl exit code != 0
 fn_check_curl_error() {
     result=$1
@@ -105,6 +104,53 @@ fn_check_curl_error() {
         exit 1  # okay here, but don't do it in wrapper
     fi
 }
+
+# select which edge to use and which use as a fallback
+API_EDGE="https://api.trafikito.com";
+
+fn_select_edge ()
+{
+    API_EDGE_1="https://ap-southeast-1.api.trafikito.com"
+    API_EDGE_2="https://eu-west-1.api.trafikito.com"
+    API_EDGE_3="https://us-east-1.api.trafikito.com"
+
+    # TODO while this is POSIX way to get random number it's time depended and creates spikes on edge during same second
+    # big range to avoid unequal random value distribution on some systems
+    DEFAULT_EDGE=`awk 'BEGIN{srand();print int(rand()*(12000-1))+1 }'`
+
+    if [ "$DEFAULT_EDGE" -gt 4000 ]; then
+        API_EDGE_1="https://eu-west-1.api.trafikito.com"
+        API_EDGE_2="https://us-east-1.api.trafikito.com"
+        API_EDGE_3="https://ap-southeast-1.api.trafikito.com"
+    fi
+
+    if [ "$DEFAULT_EDGE" -gt 8000 ]; then
+        API_EDGE_1="https://us-east-1.api.trafikito.com"
+        API_EDGE_2="https://ap-southeast-1.api.trafikito.com"
+        API_EDGE_3="https://eu-west-1.api.trafikito.com"
+    fi
+
+    testData=`curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$API_EDGE_1/v2/ping"`
+    if [ "$testData" = "OK" ]; then
+        API_EDGE="$API_EDGE_1"
+    else
+      testData=`curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$API_EDGE_2/v2/ping"`
+        if [ "$testData" = "OK" ]; then
+            API_EDGE="$API_EDGE_2"
+        else
+          testData=`curl -X POST --silent --retry 3 --retry-delay 1 --max-time 30 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain' "$API_EDGE_3/v2/ping"`
+          if [ "$testData" = "OK" ]; then
+             API_EDGE="$API_EDGE_3"
+          else
+            fn_log "Network issues? Try again."
+            exit 1;
+          fi
+        fi
+    fi
+}
+
+fn_select_edge
+fn_debug "Edge selected: $API_EDGE"
 
 ###############################################
 # function to log and send an error to upstream
@@ -122,12 +168,12 @@ fn_send_error() {
     fi
     now=`date +%s`
     age=$(( now - last ))
-    # report same error once per 3hours
-    if [ $age -gt 10800 ]; then
+    # report same error once per 1 minute
+    if [ $age -gt 60 ]; then
         fn_log "         reporting error to trafikito"
         ###############################################################################
         curl --request POST --silent --retry 3 --retry-delay 10 --max-time 30 \
-              --url "$URL/v2/agent/error_feedback" \
+              --url "$API_EDGE/v2/agent/error_feedback" \
               --header 'cache-control: no-cache' \
               --header 'content-type: multipart/form-data' \
               -F "code=$errcode" \
@@ -159,15 +205,20 @@ fn_get_config() {
     if [ -f $LAST_CONFIG ]; then
         lastData=`cat $LAST_CONFIG`
         set $lastData
-        CALL_TOKEN=$1
+        CALL_TOKEN=`echo "$1" | sed -e 's/[^a-Z0-9]*//g'`
+        if [ -z "$CALL_TOKEN" ]; then
+            # TODO some distros erases all valid call tokens for any reason
+            CALL_TOKEN="$1"
+        fi
     fi
 
     fn_debug "Previous hash: $CALL_TOKEN"
 
     data=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30  \
-               --url     "$URL/v2/agent/get_config" \
+               --url     "$API_EDGE/v2/agent/get_config" \
                --header  "Content-Type: application/json" \
                --data "{ \"serverId\": \"$SERVER_ID\", \"serverApiKey\": \"$API_KEY\", \"previous\": \"$CALL_TOKEN\" }" `
+
     # check for curl error
     fn_check_curl_error $? 'getting config'
     # check for trafikito error
@@ -187,6 +238,8 @@ fn_get_config() {
         return 1
     fi
 
+    # data must be JSON or begin with STOP
+
     echo "$data" | grep -q "^{|STOP"
     if [ $? -eq 0 ]; then
         fn_send_error 105 "" "AGENT_INVALID_CYCLE_DATA" "$data"
@@ -197,7 +250,8 @@ fn_get_config() {
     # create $BASEDIR/var/STOP because this user may not have super user access
     case $data in STOP*)
         fn_log "Stopping the agent. Reason: $data"
-        fn_send_error 103 $TMP_FILE "AGENT_STOPPING" "$data"
+        fn_log "To uninstall the agent run this:"
+        fn_log "sudo sh $BASEDIR/uninstall.sh"
         echo $data >$BASEDIR/var/STOP
         exit 1
     esac
@@ -251,12 +305,12 @@ fn_execute_trafikito_cmd() {
 ##############################
 fn_download()
 {
- echo "$URL/v2/agent/get_agent_file?file=$1"
+ echo "$API_EDGE/v2/agent/get_agent_file?file=$1"
 
-#    fn_debug "Downloading... $URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+#    fn_debug "Downloading... $API_EDGE/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
 #    case `hostname -f` in
 #        *home) echo "http://tui.home/trafikito/$1" ;;
-#            *) echo "$URL/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
+#            *) echo "$API_EDGE/v2/agent/get_agent_file?file=$1 -H 'Cache-Control: no-cache' -H 'Content-Type: text/plain'"
 #    esac
 }
 
@@ -289,7 +343,7 @@ fn_install_trafikito_widget() {
     # can execute only commands with trafikito_ in it
     WIDGET_ID=$1
     data=`curl --request POST --retry 3 --retry-delay 1 --max-time 30  \
-               --url     "$URL/v2/widget/get-command" \
+               --url     "$API_EDGE/v2/widget/get-command" \
                --header  "Content-Type: application/json" \
                --data "{ \"widgetId\": \"$WIDGET_ID\" }"`
     fn_check_curl_error $? "installing widget $WIDGET_ID"
@@ -322,7 +376,7 @@ fn_install_trafikito_widget() {
     fn_debug `cat $WIDGET_OUTPUT_FILE`
 
     installResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
-     --url     $URL/v2/widget/install \
+     --url     $API_EDGE/v2/widget/install \
      --form    output=@$WIDGET_OUTPUT_FILE \
      --form    serverId=$SERVER_ID \
      --form    widgetId=$WIDGET_ID \
@@ -339,11 +393,13 @@ fn_install_trafikito_widget() {
 ##################################################
 # start of main
 ##################################################
-fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
-fn_log "Agent v${AGENT_VERSION} run started"
 
 if [ -f $BASEDIR/var/STOP ]; then
+    fn_log "Found file at $BASEDIR/var/STOP:"
     fn_log `cat $BASEDIR/var/STOP`
+    fn_log "Terminating this cycle. STOP file is often created when server is removed using dashboard."
+    fn_log "To uninstall the agent run this:"
+    fn_log "sudo sh $BASEDIR/uninstall.sh"
     exit 1
 fi
 
@@ -399,7 +455,7 @@ if [ -f $BASEDIR/var/time_took_last_time.tmp ]; then
 fi
 
 saveResult=`curl --request POST --silent --retry 3 --retry-delay 1 --max-time 30 \
-     --url     $URL/v2/agent/save_output \
+     --url     $API_EDGE/v2/agent/save_output \
      --form    output=@$TMP_FILE \
      --form    timeTookLastTime=$TIME_TOOK_LAST_TIME \
      --form    serverId=$SERVER_ID \
