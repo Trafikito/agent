@@ -31,7 +31,7 @@
 START=$(date +%s)
 
 # agent version: will be compared as a string
-export AGENT_VERSION=54
+export AGENT_VERSION=55
 export AGENT_NEW_VERSION=$AGENT_VERSION  # redefined in fn_set_available_commands
 
 # basedir is $1 to enable this to run from anywhere
@@ -65,7 +65,7 @@ fn_debug() {
 DEBUG=1
 
 fn_log "+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-"
-fn_log "Agent v${AGENT_VERSION} run started"
+fn_log "Agent v${AGENT_VERSION} run started."
 
 LAST_CONFIG=$BASEDIR/var/last_config.tmp
 
@@ -286,7 +286,7 @@ fn_execute_trafikito_cmd() {
     if [ -z "$cmd" ]; then
         # can not execute empty string
         echo "No command specified for execute_trafikito_cmd. Command: $cmd"
-    elif [ $(echo "$cmd" | grep "trafikito_" | sed "s/[^a-zA-Z_]*//g") = "$cmd" ]; then
+    elif [ $(echo "$cmd" | grep "trafikito_" | sed "s/[^0-9a-zA-Z_]*//g") = "$cmd" ]; then
         # can execute, let's do it. Echo commands delimiter:
         echo "*-*-*-*------------ Trafikito command: $cmd" >>$TMP_FILE
         # $cmd is validated. has trafikito_ prefix and is single word with a-Z and _ characters.

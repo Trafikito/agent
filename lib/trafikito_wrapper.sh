@@ -52,7 +52,7 @@ while true; do
 
     CYCLE_DELAY=0
     if [ -f $BASEDIR/var/cycle_delay.tmp ]; then
-        CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay.tmp`
+        CYCLE_DELAY=`cat $BASEDIR/var/cycle_delay.tmp` || 0
     fi
     sleep 1 # in case run takes less than 1 sec
 

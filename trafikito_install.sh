@@ -105,11 +105,10 @@ if [ -z "$SERVER_NAME" ]; then
 fi
 
 # running as root or user ?
-RUNAS="nobody"
+RUNAS=`whoami`
 WHOAMI=`whoami`
 if [ "$WHOAMI" != "root" ]; then
     echo "If possible, run installation as root user."
-    echo "Root user is used to make script running as 'nobody' which improves security."
     echo "To install as root either log in as root and execute the script or use:"
     echo
     echo "  sudo sh $0 --user_api_key=$USER_API_KEY --workspace_id=$WORKSPACE_ID --servername=$SERVER_NAME"
@@ -207,7 +206,6 @@ set "curl"   "transfer an url (essential)"\
     "free"   "report amount of free and used memory in the system"\
     "egrep"  "print lines matching a pattern"\
     "pgrep"  "look up or signal processes based on name and other attributes"\
-    "lsof"   "list open files"\
     "sed"    "stream editor for filtering and transforming text"\
     "su"     "change user ID or become superuser"\
     "top"    "display processes"\
@@ -360,7 +358,7 @@ echo "* Generating initial settings"
 cat <<STOP
 trafikito_free="free"
 trafikito_cpu_info_full="cat /proc/cpuinfo | sed '/^\s*$/q'"
-trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | egrep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
+trafikito_cpu_info="cat /proc/cpuinfo | sed '/^\s*$/q' | grep -i 'cache\|core\|model\|mhz\|sibling\|vendor\|family'"
 trafikito_uptime="uptime"
 trafikito_cpu_processors_count="cat /proc/cpuinfo 2>&1 | grep processor | wc -l"
 trafikito_vmstat="vmstat"
@@ -376,7 +374,7 @@ trafikito_top="top -bcn1 -o %MEM | sed -e '1,/^\s*$/ d' | head -n 7"
 trafikito_ps="ps aux --sort=-%mem,-%cpu --width 200 | head -n 7"
 STOP
 ) | while read line; do
-    command=`echo "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'`
+    command=`echo "$line" | sed -e 's#^[^=]*=##' -e 's#^"##' -e 's#"$##'` > /dev/null 2>&1
     echo "  executing $command..."
     echo "*-*-*-*------------ Trafikito command: $command" >>$TMP_FILE
     eval "$command" >>$TMP_FILE 2>&1
@@ -417,6 +415,9 @@ if [ "$WHOAMI" != "root" ]; then
     exit 0
 fi
 
+# kill any running instances
+kill $(ps aux | awk '/trafikito_wrapper.sh/ {print $2}') >/dev/null 2>&1
+
 #####################################
 # systemd: test for useable systemctl
 #####################################
@@ -431,7 +432,6 @@ if [ $? -eq 0 ]; then
     echo "[Service]"
     echo "Type=simple"
     echo "ExecStart=$BASEDIR/lib/trafikito_wrapper.sh $SERVER_ID $BASEDIR"
-    echo "User=nobody"
     echo "[Install]"
     echo "WantedBy=multi-user.target"
     ) >/etc/systemd/system/trafikito.service

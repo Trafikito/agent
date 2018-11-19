@@ -24,32 +24,31 @@
 #  * SUCH DAMAGE.
 #  */
 
-ECHO=/bin/echo
 WHOAMI=`whoami`
 
-$ECHO ""
-$ECHO ""
-$ECHO "  _____           __ _ _    _ _"
-$ECHO " |_   _| __ __ _ / _(_) | _(_) |_ ___"
-$ECHO "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
-$ECHO "   | || | | (_| |  _| |   <| | || (_) |"
-$ECHO "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
-$ECHO ""
-$ECHO ""
-$ECHO "    Uninstalling Trafikito agent"
-$ECHO ""
-$ECHO ""
-$ECHO "This is 2 steps process:"
-$ECHO "1. Stop the agent"
-$ECHO "2. Delete the files"
-$ECHO ""
+echo ""
+echo ""
+echo "  _____           __ _ _    _ _"
+echo " |_   _| __ __ _ / _(_) | _(_) |_ ___"
+echo "   | || '__/ _\` | |_| | |/ / | __/ _ \\"
+echo "   | || | | (_| |  _| |   <| | || (_) |"
+echo "   |_||_|  \__,_|_| |_|_|\_\_|\__\___/"
+echo ""
+echo ""
+echo "    Uninstalling Trafikito agent"
+echo ""
+echo ""
+echo "This is 2 steps process:"
+echo "1. Stop the agent"
+echo "2. Delete the files"
+echo ""
 
 BASEDIR="${0%/*}"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-$ECHO -n "1/2: Do you want to STOP the Trafikto agent? (type 'yes' to continue): "; read x
+echo -n "1/2: Do you want to STOP the Trafikto agent? (type 'yes' to continue): "; read x
 if [ "$x" != 'yes' ]; then
-    $ECHO "** Uninstall aborted!"
+    echo "** Uninstall aborted!"
     exit 0
 fi
 
@@ -62,16 +61,18 @@ elif [ -f $BASEDIR/trafikito ]; then
     $BASEDIR/trafikito stop
 fi
 
+kill $(ps aux | awk '/trafikito_wrapper.sh/ {print $2}') >/dev/null 2>&1
+
 # now remove everything in BASEDIR
-$ECHO -n "2/2: Do you want to remove the Trafikto agent files in $BASEDIR? (type 'yes' to continue): "; read x
+echo -n "2/2: Do you want to remove the Trafikto agent files in $BASEDIR? (type 'yes' to continue): "; read x
 if [ "$x" != 'yes' ]; then
-    $ECHO "** Uninstall aborted!"
+    echo "** Uninstall aborted!"
     exit 0
 fi
 
 rm -rf "$BASEDIR"
 if [ $? -ne 0 ]; then
-    $ECHO "** Removing $BASEDIR failed! Looks like you don't have write permission"
+    echo "** Removing $BASEDIR failed! Looks like you don't have write permission"
 fi
 
-$ECHO "Trafikito where successfully uninstalled"
+echo "Trafikito where successfully uninstalled"
